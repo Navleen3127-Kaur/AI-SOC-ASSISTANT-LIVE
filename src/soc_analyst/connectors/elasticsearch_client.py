@@ -1,0 +1,207 @@
+from datetime import datetime, timedelta, timezone
+from typing import Any
+from opensearchpy import OpenSearch
+
+from soc_analyst.config import get_settings
+from soc_analyst.models.schemas import SecurityAlert
+
+
+class ElasticsearchClient:
+    def __init__(self) -> None:
+        settings = get_settings()
+        self.index = settings.wazuh_index_pattern
+        
+        from urllib.parse import urlparse
+        parsed_url = urlparse(settings.wazuh_indexer_url)
+        host = parsed_url.hostname or "localhost"
+        port = parsed_url.port or (443 if parsed_url.scheme == "https" else 80)
+        use_ssl = parsed_url.scheme == "https"
+
+        self.client = OpenSearch(
+            hosts=[{"host": host, "port": port}],
+            http_auth=(settings.wazuh_username, settings.wazuh_password),
+            use_ssl=use_ssl,
+            verify_certs=settings.verify_ssl,
+            ssl_show_warn=False,
+            timeout=30,
+        )
+
+    def health_check(self) -> dict[str, Any]:
+        from soc_analyst.config import get_settings
+        if get_settings().enable_offline_mode:
+            return {"status": "offline_mode", "cluster": "offline_mock_cluster"}
+        try:
+            info = self.client.info()
+            return {"status": "connected", "cluster": info.get("cluster_name", "unknown")}
+        except Exception as exc:
+            return {"status": "error", "message": str(exc)}
+
+    def search_alerts(
+        self,
+        query: str = "*",
+        hours_back: int = 24,
+        min_rule_level: int = 0,
+        limit: int = 20,
+    ) -> list[SecurityAlert]:
+        from soc_analyst.config import get_settings
+        if get_settings().enable_offline_mode:
+            return []
+        since = datetime.now(timezone.utc) - timedelta(hours=hours_back)
+        body: dict[str, Any] = {
+            "size": limit,
+            "sort": [{"timestamp": {"order": "desc"}}],
+            "query": {
+                "bool": {
+                    "must": [
+                        {
+                            "range": {
+                                "timestamp": {
+                                    "gte": since.isoformat(),
+                                }
+                            }
+                        }
+                    ],
+                    "filter": [],
+                }
+            },
+        }
+
+        if min_rule_level > 0:
+            body["query"]["bool"]["filter"].append(
+                {"range": {"rule.level": {"gte": min_rule_level}}}
+            )
+
+        if query and query != "*":
+            body["query"]["bool"]["must"].append(
+                {
+                    "query_string": {
+                        "query": query,
+                        "fields": [
+                            "rule.description",
+                            "full_log",
+                            "data.srcip",
+                            "data.dstip",
+                            "agent.name",
+                            "data.win.eventdata.subjectUserName",
+                        ],
+                    }
+                }
+            )
+
+        response = self.client.search(index=self.index, body=body)
+        return [self._parse_hit(hit) for hit in response["hits"]["hits"]]
+
+    def get_alert_by_id(self, alert_id: str) -> SecurityAlert | None:
+        from soc_analyst.config import get_settings
+        if get_settings().enable_offline_mode:
+            return None
+        try:
+            body = {
+                "size": 1,
+                "query": {
+                    "ids": {
+                        "values": [alert_id]
+                    }
+                }
+            }
+            response = self.client.search(index=self.index, body=body)
+            hits = response.get("hits", {}).get("hits", [])
+            if hits:
+                return self._parse_hit(hits[0])
+            return None
+        except Exception:
+            return None
+
+    def get_related_events(
+        self,
+        alert: SecurityAlert,
+        hours_back: int = 24,
+        limit: int = 50,
+    ) -> list[SecurityAlert]:
+        from soc_analyst.config import get_settings
+        if get_settings().enable_offline_mode:
+            return []
+        since = alert.timestamp - timedelta(hours=hours_back)
+        should_clauses: list[dict[str, Any]] = []
+
+        if alert.source_ip:
+            should_clauses.append({"term": {"data.srcip": alert.source_ip}})
+        if alert.destination_ip:
+            should_clauses.append({"term": {"data.dstip": alert.destination_ip}})
+        if alert.agent_name:
+            should_clauses.append({"term": {"agent.name": alert.agent_name}})
+        if alert.username:
+            should_clauses.append(
+                {
+                    "term": {
+                        "data.win.eventdata.subjectUserName": alert.username
+                    }
+                }
+            )
+
+        if not should_clauses:
+            return []
+
+        body = {
+            "size": limit,
+            "sort": [{"timestamp": {"order": "asc"}}],
+            "query": {
+                "bool": {
+                    "must": [
+                        {"range": {"timestamp": {"gte": since.isoformat()}}},
+                    ],
+                    "should": should_clauses,
+                    "minimum_should_match": 1,
+                }
+            },
+        }
+
+        response = self.client.search(index=self.index, body=body)
+        return [self._parse_hit(hit) for hit in response["hits"]["hits"]]
+
+    def _parse_hit(self, hit: dict[str, Any]) -> SecurityAlert:
+        source = hit.get("_source", hit)
+        data = source.get("data", {}) or {}
+        win = data.get("win", {}) or {}
+        eventdata = win.get("eventdata", {}) or {}
+
+        timestamp_raw = source.get("timestamp") or source.get("@timestamp")
+        if isinstance(timestamp_raw, str):
+            timestamp = datetime.fromisoformat(timestamp_raw.replace("Z", "+00:00"))
+        else:
+            timestamp = datetime.now(timezone.utc)
+
+        rule = source.get("rule", {}) or {}
+        agent = source.get("agent", {}) or {}
+
+        from soc_analyst.services.forensic_extractor import extract_forensics
+        import json
+        evidence = extract_forensics(source)
+
+        raw_src_ip = data.get("srcip", data.get("src_ip", "")) or eventdata.get("ipAddress", "")
+        cleaned_src_ip = "" if raw_src_ip in ("-", "") else raw_src_ip
+
+        raw_user = (
+            eventdata.get("targetUserName")
+            or eventdata.get("user")
+            or eventdata.get("subjectUserName")
+            or data.get("dstuser", "")
+        )
+        cleaned_user = "" if raw_user in ("-", "") else raw_user
+
+        return SecurityAlert(
+            id=hit.get("_id", source.get("id", "")),
+            timestamp=timestamp,
+            rule_id=str(rule.get("id", "")),
+            rule_description=rule.get("description", ""),
+            rule_level=int(rule.get("level", 0) or 0),
+            agent_name=agent.get("name", ""),
+            agent_ip=agent.get("ip", ""),
+            source_ip=cleaned_src_ip,
+            destination_ip=data.get("dstip", data.get("dst_ip", "")),
+            username=cleaned_user,
+            user=cleaned_user,
+            full_log=source.get("full_log", ""),
+            raw_log=json.dumps(evidence, indent=2),
+            raw=source,
+        )

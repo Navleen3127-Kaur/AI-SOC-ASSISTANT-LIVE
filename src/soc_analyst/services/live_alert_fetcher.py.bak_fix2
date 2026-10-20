@@ -1,0 +1,223 @@
+"""Live alert fetcher for Wazuh Indexer."""
+
+import logging
+import asyncio
+from datetime import datetime, timezone, timedelta
+from typing import Any
+
+from opensearchpy import OpenSearch
+from opensearchpy.exceptions import ConnectionError, ConnectionTimeout, AuthenticationException
+from soc_analyst.config import get_settings
+from soc_analyst.models.schemas import SecurityAlert
+from soc_analyst.connectors.elasticsearch_client import ElasticsearchClient
+
+logger = logging.getLogger(__name__)
+
+
+class LiveAlertFetcher:
+    """Fetches new alerts directly from the Wazuh Indexer (OpenSearch/Elasticsearch)."""
+
+    def __init__(self) -> None:
+        settings = get_settings()
+        self.url = settings.wazuh_indexer_url
+        self.username = settings.wazuh_username
+        self.password = settings.wazuh_password
+        self.index_pattern = settings.wazuh_index_pattern
+        self.verify_ssl = settings.verify_ssl
+        self.polling_interval = settings.polling_interval
+        self.min_alert_level = settings.min_alert_level
+        self.startup_lookback_minutes = settings.live_alert_startup_lookback_minutes
+
+        self.indexer: ElasticsearchClient | None = None
+        self.client: Any | None = None
+        self._last_processed_timestamp: datetime | None = None
+        self._processed_ids: set[str] = set()
+
+        logger.info("Initializing LiveAlertFetcher with shared IndexerClient index pattern: %s", self.index_pattern)
+        self._init_client()
+
+    def _init_client(self) -> None:
+        """Initializes the shared indexer client."""
+        try:
+            self.indexer = ElasticsearchClient()
+            self.client = self.indexer.client
+        except Exception as exc:
+            logger.error("Unexpected error initializing Wazuh Indexer client: %s", exc)
+            self.client = None
+
+    def _parse_hit(self, hit: dict[str, Any]) -> SecurityAlert | None:
+        """Parses a search hit into a SecurityAlert schema, logging any formatting issues."""
+        doc_id = hit.get("_id", "unknown")
+        logger.info("Starting parsing for document _id: %s", doc_id)
+        try:
+            source = hit.get("_source", {})
+            data = source.get("data", {}) or {}
+            win = data.get("win", {}) or {}
+            eventdata = win.get("eventdata", {}) or {}
+
+            timestamp_raw = source.get("timestamp") or source.get("@timestamp")
+            logger.info("Timestamp field raw value read: %s", timestamp_raw)
+            if isinstance(timestamp_raw, str):
+                # Standardize UTC format parsing
+                timestamp = datetime.fromisoformat(timestamp_raw.replace("Z", "+00:00"))
+            else:
+                timestamp = datetime.now(timezone.utc)
+
+            rule = source.get("rule", {}) or {}
+            agent = source.get("agent", {}) or {}
+
+            logger.info("Rule metadata read — rule.id: %s, rule.level: %s", rule.get("id"), rule.get("level"))
+            logger.info("Agent metadata read — agent.name: %s", agent.get("name"))
+
+            from soc_analyst.services.forensic_extractor import extract_forensics
+            import json
+            evidence = extract_forensics(source)
+
+            raw_src_ip = data.get("srcip", data.get("src_ip", "")) or eventdata.get("ipAddress", "")
+            cleaned_src_ip = "" if raw_src_ip in ("-", "") else raw_src_ip
+
+            raw_user = (
+                eventdata.get("targetUserName")
+                or eventdata.get("user")
+                or eventdata.get("subjectUserName")
+                or data.get("dstuser", "")
+            )
+            cleaned_user = "" if raw_user in ("-", "") else raw_user
+
+            alert = SecurityAlert(
+                id=hit.get("_id", source.get("id", "")),
+                timestamp=timestamp,
+                rule_id=str(rule.get("id", "")),
+                rule_description=rule.get("description", ""),
+                rule_level=int(rule.get("level", 0) or 0),
+                agent_name=agent.get("name", ""),
+                agent_ip=agent.get("ip", ""),
+                source_ip=cleaned_src_ip,
+                destination_ip=data.get("dstip", data.get("dst_ip", "")),
+                username=cleaned_user,
+                user=cleaned_user,
+                full_log=source.get("full_log", ""),
+                raw_log=json.dumps(evidence, indent=2),
+                raw=source,
+            )
+            logger.info("SecurityAlert object successfully created for _id: %s", doc_id)
+            return alert
+        except Exception as e:
+            logger.exception("Failed to parse hit ID %s: %s", doc_id, e)
+            return None
+
+    async def fetch_new_alerts(self, limit: int = 100) -> list[SecurityAlert]:
+        """Queries the indexer for new alerts, avoiding duplicate processing."""
+        if not self.client:
+            logger.warning("Wazuh Indexer client not connected. Re-attempting connection...")
+            self._init_client()
+            if not self.client:
+                logger.error("Wazuh Indexer is still unavailable. Skipping poll.")
+                return []
+
+        # Initialize start timestamp on the first poll
+        if self._last_processed_timestamp is None:
+            self._last_processed_timestamp = datetime.now(timezone.utc) - timedelta(minutes=self.startup_lookback_minutes)
+            logger.info("Initializing startup lookup window to %d minutes ago: %s", self.startup_lookback_minutes, self._last_processed_timestamp)
+
+        body = {
+    "size": limit,
+    "sort": [{"timestamp": {"order": "asc"}}],
+    "query": {
+        "bool": {
+            "filter": [
+                {
+                    "range": {
+                        "timestamp": {
+                            "gt": self._last_processed_timestamp.isoformat()
+                        }
+                    }
+                },
+                {
+                    "range": {
+                        "rule.level": {
+                            "gte": self.min_alert_level
+                        }
+                    }
+                }
+            ]
+        }
+    }
+}
+
+        logger.info(
+    "Polling started: Querying for new alerts after timestamp: %s",
+    self._last_processed_timestamp,
+)
+        try:
+            response = self.client.search(index=self.index_pattern, body=body)
+            hits = response.get("hits", {}).get("hits", [])
+        except AuthenticationException as auth_exc:
+            logger.error("Authentication failure during query: %s", auth_exc)
+            return []
+        except ConnectionTimeout as timeout_exc:
+            logger.error("Connection timeout querying alerts: %s", timeout_exc)
+            return []
+        except ConnectionError as conn_exc:
+            logger.error("Connection error querying alerts: %s", conn_exc)
+            return []
+        except Exception as exc:
+            logger.error("Unexpected error querying alerts: %s", exc)
+            return []
+
+        if not hits:
+            logger.info("Polling completed: Empty response. No new alerts.")
+            return []
+
+        logger.info("Alerts fetched: Found %d raw alerts in search response.", len(hits))
+
+        new_alerts: list[SecurityAlert] = []
+        skipped_count = 0
+
+        for hit in hits:
+            doc_id = hit.get("_id", "unknown")
+            logger.info("Auditing hit - Document _id: %s", doc_id)
+
+            alert = self._parse_hit(hit)
+            if not alert:
+                logger.info("Auditing hit - Document _id: %s: _parse_hit() returned None. Skipping alert.", doc_id)
+                continue
+            else:
+                logger.info("Auditing hit - Document _id: %s: _parse_hit() did not return None.", doc_id)
+
+            logger.info("Auditing hit - Document _id: %s: Parsed timestamp: %s", doc_id, alert.timestamp)
+
+            # Log whether the alert was skipped because of timestamp comparison
+            logger.info("Auditing hit - Document _id: %s: Skipped because of timestamp comparison: False", doc_id)
+
+            if alert.id in self._processed_ids:
+                skipped_count += 1
+                logger.info("Auditing hit - Document _id: %s: Skipped because alert.id (%s) is already in _processed_ids.", doc_id, alert.id)
+                continue
+            else:
+                logger.info("Auditing hit - Document _id: %s: Not skipped because of _processed_ids.", doc_id)
+
+            new_alerts.append(alert)
+            self._processed_ids.add(alert.id)
+            logger.info("Auditing hit - Document _id: %s: Appended to new_alerts.", doc_id)
+
+        logger.info("Auditing hit - Final value of len(new_alerts): %d", len(new_alerts))
+
+        if skipped_count > 0:
+            logger.info("Duplicate alerts skipped: %d alerts already processed.", skipped_count)
+
+        logger.info("Polling completed: Processed %d new alerts successfully.", len(new_alerts))
+
+        # Maintain bounded in-memory cache size for IDs
+        if len(self._processed_ids) > 10000:
+            # Prune down to keep the most recent ones
+            self._processed_ids = set(list(self._processed_ids)[-5000:])
+        if new_alerts:
+          self._last_processed_timestamp = max(
+        alert.timestamp for alert in new_alerts
+    )
+        logger.info(
+        "Updated last processed timestamp to %s",
+        self._last_processed_timestamp,
+    )
+        return new_alerts

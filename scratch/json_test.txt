@@ -1,0 +1,1 @@
+{"win":{"system":{"providerName":"Microsoft-Windows-Sysmon","eventID":"1","severityValue":"INFORMATION","channel":"Microsoft-Windows-Sysmon/Operational"},"eventdata":{"image":"C:\\Users\\navle\\AppData\\Local\\Temp\\test-suspicious.exe","processId":"4152","user":"NAVLEEN\\navle"}}}

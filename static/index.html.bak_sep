@@ -1,0 +1,2781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI SOC Analyst | Cyber Operations Dashboard</title>
+  <!-- Google Fonts: Inter & Fira Code -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <!-- Marked.js Markdown Parser -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    :root {
+      --bg-darker: #060913;
+      --bg-dark: #0a0f1d;
+      --bg-panel: #111827;
+      --bg-card: rgba(17, 24, 39, 0.7);
+      --bg-card-hover: rgba(31, 41, 55, 0.8);
+      
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-glow: rgba(6, 182, 212, 0.25);
+      --border-active: #06b6d4;
+      
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --text-dark: #6b7280;
+      
+      --accent-cyan: #06b6d4;
+      --accent-purple: #a855f7;
+      --accent-blue: #3b82f6;
+      
+      --critical: #ef4444;
+      --high: #f97316;
+      --medium: #eab308;
+      --low: #22c55e;
+      --info: #3b82f6;
+      
+      --critical-glow: rgba(239, 68, 68, 0.2);
+      --high-glow: rgba(249, 115, 22, 0.2);
+      --medium-glow: rgba(234, 179, 8, 0.2);
+      --low-glow: rgba(34, 197, 94, 0.2);
+      
+      --shadow-neon: 0 0 15px rgba(6, 182, 212, 0.35);
+      --shadow-critical: 0 0 15px rgba(239, 68, 68, 0.35);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+    }
+
+    /* Custom scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-darker);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.05) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(168, 85, 247, 0.05) 0px, transparent 50%);
+      color: var(--text-main);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      background: rgba(10, 15, 29, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 0.85rem 1.75rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 50;
+    }
+
+    .brand-section {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .brand-logo {
+      color: var(--accent-cyan);
+      font-size: 1.5rem;
+      text-shadow: var(--shadow-neon);
+      animation: pulse-glow 3s infinite alternate;
+    }
+
+    .brand-name {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-tag {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      border-left: 1px solid var(--border-color);
+      padding-left: 0.75rem;
+      margin-left: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 0.4rem 0.85rem;
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--low);
+      box-shadow: 0 0 8px var(--low);
+    }
+
+    .status-dot.connecting {
+      background: var(--medium);
+      box-shadow: 0 0 8px var(--medium);
+      animation: flash 1.5s infinite;
+    }
+
+    .status-dot.error {
+      background: var(--critical);
+      box-shadow: 0 0 8px var(--critical);
+    }
+
+    .btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.45rem 0.95rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary {
+      background: var(--accent-cyan);
+      border-color: var(--accent-cyan);
+      color: var(--bg-darker);
+    }
+
+    .btn-primary:hover {
+      background: #08d9ff;
+      border-color: #08d9ff;
+      box-shadow: var(--shadow-neon);
+    }
+
+    .btn-accent {
+      background: transparent;
+      border: 1px solid var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    .btn-accent:hover {
+      background: rgba(6, 182, 212, 0.1);
+      box-shadow: 0 0 10px rgba(6, 182, 212, 0.2);
+    }
+    
+    .btn-critical {
+      background: var(--critical);
+      border-color: var(--critical);
+      color: white;
+    }
+    .btn-critical:hover {
+      background: #ff5e5e;
+      border-color: #ff5e5e;
+      box-shadow: var(--shadow-critical);
+    }
+
+    .btn-icon {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+    }
+
+    /* Main Layout */
+    .dashboard-container {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 70px 320px 1fr 340px;
+      overflow: hidden;
+    }
+
+    /* Sidebar quick metrics */
+    .metric-sidebar {
+      background: var(--bg-dark);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.25rem 0;
+      gap: 1.5rem;
+    }
+
+    .sidebar-metric {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .metric-icon-box {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      transition: all 0.2s;
+    }
+
+    .sidebar-metric:hover .metric-icon-box {
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+      transform: scale(1.05);
+    }
+
+    .sidebar-metric .count-badge {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      border-radius: 8px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 0.15rem 0.4rem;
+      border: 1px solid rgba(0, 0, 0, 0.2);
+    }
+
+    .sidebar-metric.critical .metric-icon-box { color: var(--critical); border-color: rgba(239, 68, 68, 0.3); }
+    .sidebar-metric.critical .count-badge { background: var(--critical); color: white; }
+    .sidebar-metric.high .metric-icon-box { color: var(--high); border-color: rgba(249, 115, 22, 0.3); }
+    .sidebar-metric.high .count-badge { background: var(--high); color: white; }
+    .sidebar-metric.medium .metric-icon-box { color: var(--medium); border-color: rgba(234, 179, 8, 0.3); }
+    .sidebar-metric.medium .count-badge { background: var(--medium); color: black; }
+    .sidebar-metric.low .metric-icon-box { color: var(--low); border-color: rgba(34, 197, 94, 0.3); }
+    .sidebar-metric.low .count-badge { background: var(--low); color: black; }
+    .sidebar-metric.total .metric-icon-box { color: var(--accent-cyan); border-color: rgba(6, 182, 212, 0.3); }
+    .sidebar-metric.total .count-badge { background: var(--accent-cyan); color: black; }
+
+    /* Alert Queue Panel */
+    .queue-panel {
+      background: var(--bg-dark);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 1rem;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .panel-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .search-container {
+      position: relative;
+    }
+
+    .search-container input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.45rem 0.75rem 0.45rem 2rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      transition: all 0.2s;
+    }
+
+    .search-container input:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 8px rgba(6, 182, 212, 0.15);
+      outline: none;
+    }
+
+    .search-container i {
+      position: absolute;
+      left: 0.75rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-dark);
+      font-size: 0.75rem;
+    }
+
+    .queue-controls {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .queue-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .queue-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.75rem;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      gap: 0.65rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .queue-item::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: transparent;
+    }
+
+    .queue-item.critical::before { background: var(--critical); }
+    .queue-item.high::before { background: var(--high); }
+    .queue-item.medium::before { background: var(--medium); }
+    .queue-item.low::before { background: var(--low); }
+    .queue-item.info::before { background: var(--info); }
+
+    .queue-item:hover {
+      background: var(--bg-card-hover);
+      border-color: rgba(255, 255, 255, 0.15);
+      transform: translateX(2px);
+    }
+
+    .queue-item.active {
+      background: rgba(6, 182, 212, 0.08);
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(6, 182, 212, 0.1);
+    }
+
+    .checkbox-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding-top: 0.1rem;
+    }
+
+    .checkbox-wrapper input[type="checkbox"] {
+      cursor: pointer;
+      accent-color: var(--accent-cyan);
+      width: 13px;
+      height: 13px;
+    }
+
+    .queue-item-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      min-width: 0;
+    }
+
+    .queue-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .priority-indicator {
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+    }
+    
+    .priority-indicator.critical { background: var(--critical-glow); color: #ff6b6b; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .priority-indicator.high { background: var(--high-glow); color: #ff9f43; border: 1px solid rgba(249, 115, 22, 0.3); }
+    .priority-indicator.medium { background: var(--medium-glow); color: #f1c40f; border: 1px solid rgba(234, 179, 8, 0.3); }
+    .priority-indicator.low { background: var(--low-glow); color: #2ecc71; border: 1px solid rgba(34, 197, 94, 0.3); }
+    .priority-indicator.info { background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); }
+
+    .item-score {
+      font-size: 0.7rem;
+      font-weight: 800;
+      color: var(--accent-cyan);
+    }
+
+    .queue-item-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-main);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .queue-item-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    /* Floating Bulk Selection Action Banner */
+    .bulk-banner {
+      position: absolute;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: rgba(10, 15, 29, 0.95);
+      border: 1px solid var(--accent-cyan);
+      border-radius: 30px;
+      padding: 0.65rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6), var(--shadow-neon);
+      z-index: 100;
+      transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    .bulk-banner.visible {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .bulk-banner-text {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    /* Workspace / Investigation Panel */
+    .workspace-panel {
+      background: var(--bg-darker);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .workspace-empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1rem;
+      color: var(--text-dark);
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .workspace-empty i {
+      font-size: 3rem;
+      color: rgba(255, 255, 255, 0.03);
+      border: 2px dashed rgba(255, 255, 255, 0.05);
+      padding: 2rem;
+      border-radius: 50%;
+    }
+
+    .workspace-empty h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .workspace-empty p {
+      font-size: 0.8rem;
+      max-width: 320px;
+      line-height: 1.4;
+    }
+
+    .workspace-active {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .workspace-header {
+      background: var(--bg-dark);
+      padding: 1.25rem 1.75rem;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
+    }
+
+    .alert-summary-block h2 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: var(--text-main);
+    }
+
+    .alert-meta-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .meta-tag {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .meta-tag i {
+      color: var(--accent-cyan);
+    }
+
+    .alert-actions-block {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    /* Tab navigation */
+    .tabs-nav {
+      background: var(--bg-dark);
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      padding: 0 1rem;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      padding: 0.85rem 1.25rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.15s;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.01);
+    }
+
+    .tab-btn.active {
+      color: var(--accent-cyan);
+      border-bottom-color: var(--accent-cyan);
+    }
+
+    .tab-content-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem 1.75rem;
+    }
+
+    .tab-panel {
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    .section-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent-cyan);
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+      padding-bottom: 0.35rem;
+    }
+
+    .text-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1.25rem;
+      line-height: 1.5;
+      font-size: 0.85rem;
+    }
+
+    .indicators-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .indicator-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 0.75rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.8rem;
+    }
+
+    .indicator-value {
+      font-family: 'Fira Code', monospace;
+      color: var(--accent-purple);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-right: 0.5rem;
+      font-weight: 500;
+    }
+
+    .indicator-actions {
+      display: flex;
+      gap: 0.35rem;
+    }
+
+    .indicator-action-btn {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.65rem;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .indicator-action-btn:hover {
+      color: var(--accent-cyan);
+      border-color: var(--accent-cyan);
+      background: rgba(6, 182, 212, 0.05);
+    }
+
+    /* MITRE Matrix / Mapping Panel */
+    .mitre-mapping-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .mitre-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .mitre-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .mitre-id-badge {
+      font-family: 'Fira Code', monospace;
+      font-weight: 700;
+      color: var(--accent-cyan);
+      background: rgba(6, 182, 212, 0.08);
+      border: 1px solid var(--border-color);
+      padding: 0.15rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.75rem;
+    }
+
+    .mitre-confidence {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    .mitre-confidence span {
+      font-weight: 700;
+      color: var(--low);
+    }
+
+    .mitre-name {
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
+    .mitre-tactic {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--accent-purple);
+      font-weight: 700;
+    }
+
+    .mitre-description {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+      padding-top: 0.25rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.02);
+    }
+
+    /* Remediation Checklist */
+    .remediation-checklist {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .remediation-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 0.85rem 1rem;
+      display: flex;
+      gap: 0.85rem;
+      align-items: flex-start;
+      transition: border-color 0.2s;
+    }
+
+    .remediation-item:hover {
+      border-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .remediation-priority {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: 0.1rem;
+    }
+
+    .remediation-priority.p1 { color: var(--critical); border-color: rgba(239, 68, 68, 0.3); background: var(--critical-glow); }
+    .remediation-priority.p2 { color: var(--high); border-color: rgba(249, 115, 22, 0.3); background: var(--high-glow); }
+    .remediation-priority.p3 { color: var(--medium); border-color: rgba(234, 179, 8, 0.3); background: var(--medium-glow); }
+
+    .remediation-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .remediation-action {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .remediation-rationale {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    /* Terminal logs */
+    .terminal-panel {
+      background: #02040a;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-family: 'Fira Code', monospace;
+      padding: 1rem;
+      font-size: 0.75rem;
+      color: #88c0d0;
+      overflow-x: auto;
+      max-height: 380px;
+      white-space: pre-wrap;
+      position: relative;
+    }
+
+    .terminal-copy {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-color);
+      padding: 0.25rem 0.5rem;
+      color: var(--text-muted);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.65rem;
+    }
+
+    .terminal-copy:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+    }
+
+    /* Co-Pilot Chat Panel */
+    .chat-panel {
+      background: var(--bg-dark);
+      border-left: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .chat-header {
+      padding: 1rem;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 600;
+      font-size: 0.85rem;
+      color: var(--text-main);
+    }
+
+    .chat-header i {
+      color: var(--accent-cyan);
+      text-shadow: var(--shadow-neon);
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .chat-msg {
+      padding: 0.75rem;
+      border-radius: 8px;
+      max-width: 90%;
+      font-size: 0.8rem;
+      line-height: 1.45;
+    }
+
+    .chat-msg.bot {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      align-self: flex-start;
+      border-bottom-left-radius: 1px;
+    }
+
+    .chat-msg.bot :first-child {
+      margin-top: 0;
+    }
+    .chat-msg.bot :last-child {
+      margin-bottom: 0;
+    }
+    .chat-msg.bot h1, .chat-msg.bot h2, .chat-msg.bot h3 {
+      font-size: 0.85rem;
+      margin: 0.5rem 0 0.25rem;
+      color: var(--accent-cyan);
+    }
+    .chat-msg.bot code {
+      font-family: 'Fira Code', monospace;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 0.1rem 0.25rem;
+      border-radius: 3px;
+      color: var(--accent-purple);
+    }
+    .chat-msg.bot pre {
+      background: #02040a;
+      padding: 0.5rem;
+      border-radius: 4px;
+      overflow-x: auto;
+      margin: 0.5rem 0;
+    }
+    .chat-msg.bot pre code {
+      color: #88c0d0;
+      background: transparent;
+      padding: 0;
+    }
+
+    .chat-msg.user {
+      background: var(--accent-cyan);
+      color: var(--bg-darker);
+      align-self: flex-end;
+      border-bottom-right-radius: 1px;
+      font-weight: 500;
+    }
+
+    .chat-quick-actions {
+      padding: 0.5rem 1rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      border-top: 1px solid var(--border-color);
+      background: rgba(0, 0, 0, 0.1);
+    }
+
+    .quick-action-btn {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      font-size: 0.65rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .quick-action-btn:hover {
+      background: rgba(6, 182, 212, 0.08);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+    }
+
+    .chat-input-area {
+      padding: 0.75rem;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      gap: 0.5rem;
+      background: var(--bg-dark);
+    }
+
+    .chat-input-area input {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+    }
+
+    .chat-input-area input:focus {
+      outline: none;
+      border-color: var(--accent-cyan);
+    }
+
+    .chat-input-area button {
+      background: var(--accent-cyan);
+      border: none;
+      color: var(--bg-darker);
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .chat-input-area button:hover {
+      background: #08d9ff;
+      box-shadow: var(--shadow-neon);
+    }
+
+    /* Modals & Backdrop */
+    .modal-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-backdrop.active {
+      display: flex;
+    }
+
+    .modal-card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      width: 90%;
+      max-width: 750px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+      animation: zoomIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .modal-header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .modal-header h3 i {
+      color: var(--accent-cyan);
+    }
+
+    .modal-close {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1rem;
+    }
+
+    .modal-close:hover {
+      color: var(--text-main);
+    }
+
+    .modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem;
+    }
+
+    .modal-footer {
+      padding: 1rem 1.5rem;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.75rem;
+      background: rgba(0,0,0,0.1);
+    }
+
+    /* Settings Form Styles */
+    .settings-form {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .form-group.full-width {
+      grid-column: span 2;
+    }
+
+    .form-group label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .form-group input, .form-group select {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+    }
+
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: var(--accent-cyan);
+    }
+
+    .form-group small {
+      font-size: 0.65rem;
+      color: var(--text-dark);
+    }
+
+    /* Markdown styling inside modal */
+    .report-markdown {
+      font-size: 0.85rem;
+      line-height: 1.6;
+      color: var(--text-main);
+    }
+
+    .report-markdown h1, .report-markdown h2, .report-markdown h3 {
+      color: var(--accent-cyan);
+      margin: 1.5rem 0 0.5rem;
+      font-weight: 700;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding-bottom: 0.25rem;
+    }
+    .report-markdown h1 { font-size: 1.25rem; }
+    .report-markdown h2 { font-size: 1.1rem; }
+    .report-markdown h3 { font-size: 0.95rem; }
+
+    .report-markdown ul, .report-markdown ol {
+      padding-left: 1.25rem;
+      margin: 0.75rem 0;
+    }
+
+    .report-markdown li {
+      margin-bottom: 0.35rem;
+    }
+
+    .report-markdown p {
+      margin-bottom: 0.75rem;
+    }
+
+    .report-markdown hr {
+      border: none;
+      border-top: 1px solid var(--border-color);
+      margin: 1.5rem 0;
+    }
+
+    .report-markdown code {
+      font-family: 'Fira Code', monospace;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 0.1rem 0.25rem;
+      border-radius: 3px;
+      color: var(--accent-purple);
+    }
+
+    /* Keyframe Animations */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes zoomIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    @keyframes pulse-glow {
+      from { text-shadow: 0 0 5px rgba(6, 182, 212, 0.2); }
+      to { text-shadow: 0 0 15px rgba(6, 182, 212, 0.6); }
+    }
+
+    @keyframes flash {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Notifications popup */
+    .toast {
+      position: fixed;
+      top: 1.5rem;
+      right: 1.5rem;
+      background: var(--bg-panel);
+      border: 1px solid var(--accent-cyan);
+      border-radius: 8px;
+      padding: 0.85rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5), var(--shadow-neon);
+      z-index: 2000;
+      animation: slideIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      max-width: 320px;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(120%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Header -->
+  <header>
+    <div class="brand-section">
+      <i class="fa-solid fa-shield-halved brand-logo"></i>
+      <span class="brand-name">AI SOC Analyst</span>
+      <span class="brand-tag">Ops Center</span><span id="last-updated-text" style="font-size:0.65rem; color:var(--text-dark); margin-left:1.5rem; text-transform:uppercase; letter-spacing:0.05em;">Last Updated: --</span>
+    </div>
+    
+    <div class="header-controls">
+      <div class="status-indicator">
+        <div class="status-dot" id="status-dot"></div>
+        <span id="status-text">Establishing Connection...</span>
+      </div>
+      
+      <button class="btn btn-accent" onclick="toggleStream()" id="btn-stream">
+        <i class="fa-solid fa-tower-broadcast"></i> Live Stream
+      </button>
+      
+      <button class="btn" onclick="loadPrioritized()" title="Refresh Alert Queue">
+        <i class="fa-solid fa-rotate"></i>
+      </button>
+      
+      <button class="btn btn-primary" onclick="loadDemo()" title="Inject/Replay Demo Event Pipeline">
+        <i class="fa-solid fa-flask"></i> Replay Demo
+      </button>
+      
+      <button class="btn btn-accent" onclick="resetDemo()" title="Reset Demo Data and Caches">
+        <i class="fa-solid fa-trash-can"></i> Reset Demo
+      </button>
+      
+      <button class="btn btn-icon" onclick="openSettingsModal()" title="System Configuration">
+        <i class="fa-solid fa-cog"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Dashboard Main Workspace Container -->
+  <div class="dashboard-container">
+    
+    <!-- Sidebar quick metrics -->
+    <div class="metric-sidebar">
+      <div class="sidebar-metric critical" onclick="filterQueue('critical')" title="Filter: Critical Alerts">
+        <div class="metric-icon-box">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+        <span class="count-badge" id="count-critical">0</span>
+      </div>
+
+      <div class="sidebar-metric high" onclick="filterQueue('high')" title="Filter: High Alerts">
+        <div class="metric-icon-box">
+          <i class="fa-solid fa-circle-exclamation"></i>
+        </div>
+        <span class="count-badge" id="count-high">0</span>
+      </div>
+
+      <div class="sidebar-metric medium" onclick="filterQueue('medium')" title="Filter: Medium Alerts">
+        <div class="metric-icon-box">
+          <i class="fa-solid fa-circle-question"></i>
+        </div>
+        <span class="count-badge" id="count-medium">0</span>
+      </div>
+
+      <div class="sidebar-metric low" onclick="filterQueue('low')" title="Filter: Low Alerts">
+        <div class="metric-icon-box">
+          <i class="fa-solid fa-circle-check"></i>
+        </div>
+        <span class="count-badge" id="count-low">0</span>
+      </div>
+
+      <div class="sidebar-metric total" onclick="filterQueue('all')" title="Reset Filters (Show All)">
+        <div class="metric-icon-box">
+          <i class="fa-solid fa-list-check"></i>
+        </div>
+        <span class="count-badge" id="count-total">0</span>
+      </div>
+    </div>
+
+    <!-- Alert Queue Panel (left-middle) -->
+    <div class="queue-panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span id="queue-title-text">Alert Queue</span>
+          <span style="font-size:0.7rem; font-weight:normal;" id="queue-showing-text">Showing 0 alerts</span>
+        </div>
+        <div class="view-mode-selector" style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
+          <button class="btn btn-accent active" id="btn-view-alerts" onclick="setViewMode('alerts')" style="flex: 1; justify-content: center; padding: 0.25rem; font-size: 0.75rem;">Alerts</button>
+          <button class="btn" id="btn-view-incidents" onclick="setViewMode('incidents')" style="flex: 1; justify-content: center; padding: 0.25rem; font-size: 0.75rem;">Incidents</button>
+        </div>
+        <div class="search-container">
+          <i class="fa-solid fa-search"></i>
+          <input type="text" id="queue-search" placeholder="Search..." oninput="applyFilters()" />
+        </div>
+      </div>
+      
+      <div class="queue-list" id="alert-list">
+        <!-- Rendered dynamically -->
+        <div style="padding: 2rem; text-align: center; color: var(--text-dark); font-size: 0.8rem;">
+          <i class="fa-solid fa-circle-nodes" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i>
+          No alerts ingested. Click "Run Demo" or configure SIEM settings to load.
+        </div>
+      </div>
+    </div>
+
+    <!-- Workspace Investigation Area (middle) -->
+    <div class="workspace-panel">
+      
+      <!-- Placeholder when no alert selected -->
+      <div class="workspace-empty" id="workspace-empty">
+        <i class="fa-solid fa-shield-halved"></i>
+        <h3>Cyber Analyst Triage Desk</h3>
+        <p>Select any security alert from the left panel to examine threat logs, mapping metrics, prioritized containment recommendations, and incident details.</p>
+      </div>
+
+      <!-- Active Workspace view -->
+      <div class="workspace-active" id="workspace-active" style="display: none;">
+        
+        <!-- Workspace Alert Details Header -->
+        <div class="workspace-header">
+          <div class="alert-summary-block">
+            <h2 id="work-rule-desc">Rule Name Placeholder</h2>
+            <div class="alert-meta-strip">
+              <span class="meta-tag" id="work-meta-id"><i class="fa-solid fa-tag"></i> ID: --</span>
+              <span class="meta-tag" id="work-meta-host"><i class="fa-solid fa-desktop"></i> Host: --</span>
+              <span class="meta-tag" id="work-meta-user"><i class="fa-solid fa-user"></i> User: --</span>
+              <span class="meta-tag" id="work-meta-time"><i class="fa-solid fa-clock"></i> Ingested: --</span>
+            </div>
+          </div>
+          <div class="alert-actions-block">
+            <span class="priority-indicator" id="work-priority-badge">SEVERITY --</span>
+          </div>
+        </div>
+
+        <!-- Tabbed Navigation -->
+        <div class="tabs-nav">
+          <button class="tab-btn active" onclick="switchTab('tab-triage')">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> AI Triage
+          </button>
+          <button class="tab-btn" onclick="switchTab('tab-mitre')">
+            <i class="fa-solid fa-network-wired"></i> MITRE ATT&CK
+          </button>
+          <button class="tab-btn" onclick="switchTab('tab-remediation')">
+            <i class="fa-solid fa-shield-heart"></i> Response Action
+          </button>
+          <button class="tab-btn" onclick="switchTab('tab-raw')">
+            <i class="fa-solid fa-terminal"></i> Forensic Logs
+          </button>
+        </div>
+
+        <!-- Tab Contents -->
+        <div class="tab-content-container">
+          
+          <!-- AI Triage Tab -->
+          <div class="tab-panel active" id="tab-triage">
+            <h4 class="section-title"><i class="fa-solid fa-brain"></i> Executive Threat Summary</h4>
+            <div class="text-card" id="work-summary">Triage in progress...</div>
+
+            <h4 class="section-title"><i class="fa-solid fa-binoculars"></i> Attack Narrative</h4>
+            <div class="text-card" id="work-narrative">No narrative identified.</div>
+
+            <h4 class="section-title"><i class="fa-solid fa-dna"></i> Indicators of Compromise</h4>
+            <div class="indicators-grid" id="work-indicators">
+              <!-- Rendered dynamically -->
+            </div>
+            
+            <div style="font-size: 0.75rem; color: var(--text-muted); display:flex; justify-content:space-between;">
+              <span id="work-false-positive">False Positive Likelihood: Unknown</span>
+              <span id="work-analyzed-at">Analyzed at: --</span>
+            </div>
+          </div>
+
+          <!-- MITRE ATT&CK Tab -->
+          <div class="tab-panel" id="tab-mitre">
+            <h4 class="section-title"><i class="fa-solid fa-crosshairs"></i> Mapped Tactics & Techniques</h4>
+            <div class="mitre-mapping-list" id="work-mitre-list">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
+          <!-- Remediation Checklist Tab -->
+          <div class="tab-panel" id="tab-remediation">
+            <h4 class="section-title"><i class="fa-solid fa-clipboard-list"></i> Actionable Incident Containment Checklist</h4>
+            <div class="remediation-checklist" id="work-remediation-list">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
+          <!-- Raw Log Tab -->
+          <div class="tab-panel" id="tab-raw">
+            <h4 class="section-title"><i class="fa-solid fa-code"></i> Raw SIEM Log Output</h4>
+            <div class="terminal-panel">
+              <button class="terminal-copy" onclick="copyRawLog()"><i class="fa-solid fa-copy"></i> Copy</button>
+              <code id="work-raw-log">Loading raw events...</code>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Co-Pilot Chat Sidebar (right) -->
+    <div class="chat-panel">
+      <div class="chat-header">
+        <i class="fa-solid fa-comments"></i>
+        <span>AI SOC Co-Pilot</span>
+      </div>
+      
+      <div class="chat-messages" id="chat-messages">
+        <div class="chat-msg bot">
+          Hello! I am your AI SOC Assistant. How can I help you investigate this alert? Select any alert to automatically attach incident context to our messages.
+        </div>
+      </div>
+
+      <!-- Quick prompts -->
+      <div class="chat-quick-actions" id="chat-quick-actions" style="display: none;">
+        <button class="quick-action-btn" onclick="sendQuickPrompt('Explain this alert threat vector in simple terms.')">Explain Threat</button>
+        <button class="quick-action-btn" onclick="sendQuickPrompt('What is the potential impact of this attack?')">Impact Analysis</button>
+        <button class="quick-action-btn" onclick="sendQuickPrompt('Generate a PowerShell or bash containment script to isolate the threat.')">Containment Script</button>
+        <button class="quick-action-btn" onclick="sendQuickPrompt('Is this likely a false positive? What indicators should I verify?')">Verify Alert</button>
+      </div>
+
+      <div class="chat-input-area">
+        <input type="text" id="chat-input" placeholder="Ask details, draft rules, mitigate..." onkeydown="handleChatKey(event)" />
+        <button onclick="sendChatMessage()" title="Send message to AI Co-pilot">
+          <i class="fa-solid fa-paper-plane"></i>
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Bulk Actions Floating Banner -->
+  <div class="bulk-banner" id="bulk-banner">
+    <span class="bulk-banner-text" id="bulk-banner-text">0 Alerts Selected</span>
+    <button class="btn btn-accent" onclick="generateIncidentReport()">
+      <i class="fa-solid fa-file-invoice"></i> Compile Incident Report
+    </button>
+    <button class="btn" onclick="clearSelection()" style="padding: 0.35rem 0.65rem;">
+      Clear
+    </button>
+  </div>
+
+  <!-- Settings Configuration Modal -->
+  <div class="modal-backdrop" id="modal-settings">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-sliders"></i> System Configuration Manager</h3>
+        <button class="modal-close" onclick="closeSettingsModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <form class="settings-form" id="settings-form" onsubmit="saveSettings(event)">
+          <div class="form-group">
+            <label for="set-llm-provider">LLM Provider</label>
+            <select id="set-llm-provider" onchange="toggleSettingsLLMView()">
+              <option value="openai">OpenAI (SaaS)</option>
+              <option value="ollama">Ollama (Local / Open-Source)</option>
+            </select>
+          </div>
+          
+          <div class="form-group">
+            <!-- empty for grid alignment -->
+          </div>
+
+          <!-- OpenAI section -->
+          <div class="form-group openai-field">
+            <label for="set-openai-key">OpenAI API Key</label>
+            <input type="password" id="set-openai-key" placeholder="sk-..." />
+          </div>
+          <div class="form-group openai-field">
+            <label for="set-openai-model">OpenAI Model Name</label>
+            <input type="text" id="set-openai-model" placeholder="gpt-4o-mini" />
+          </div>
+
+          <!-- Ollama section -->
+          <div class="form-group ollama-field" style="display:none;">
+            <label for="set-ollama-url">Ollama Base URL</label>
+            <input type="text" id="set-ollama-url" placeholder="http://localhost:11434" />
+          </div>
+          <div class="form-group ollama-field" style="display:none;">
+            <label for="set-ollama-model">Ollama Model Name</label>
+            <input type="text" id="set-ollama-model" placeholder="llama3.2" />
+          </div>
+
+          <div class="form-group full-width" style="border-top:1px solid var(--border-color); margin: 0.5rem 0; padding-top:0.75rem;">
+            <label style="color:var(--accent-cyan)">SIEM & ELK Integrations</label>
+          </div>
+
+          <div class="form-group">
+            <label for="set-es-host">Elasticsearch Host</label>
+            <input type="text" id="set-es-host" placeholder="http://localhost:9200" />
+          </div>
+          <div class="form-group">
+            <label for="set-wazuh-index">Wazuh Alerts Index Pattern</label>
+            <input type="text" id="set-wazuh-index" placeholder="wazuh-alerts-*" />
+          </div>
+          <div class="form-group">
+            <label for="set-es-user">Elasticsearch Username</label>
+            <input type="text" id="set-es-user" placeholder="elastic" />
+          </div>
+          <div class="form-group">
+            <label for="set-es-pass">Elasticsearch Password</label>
+            <input type="password" id="set-es-pass" placeholder="changeme (Optional)" />
+          </div>
+
+          <div class="form-group">
+            <label for="set-poll-interval">SIEM Poll Interval (Seconds)</label>
+            <input type="number" id="set-poll-interval" min="5" max="300" />
+          </div>
+          <div class="form-group">
+            <label for="set-max-batch">Max Alerts per Poll Query</label>
+            <input type="number" id="set-max-batch" min="5" max="200" />
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeSettingsModal()">Cancel</button>
+        <button class="btn btn-primary" type="submit" form="settings-form">Save Credentials & Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Incident Report Modal -->
+  <div class="modal-backdrop" id="modal-report">
+    <div class="modal-card" style="max-width:850px; height:80vh;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-file-signature"></i> Incident Response Summary Report</h3>
+        <button class="modal-close" onclick="closeReportModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <div class="report-markdown" id="report-rendered-html">
+          <!-- Rendered Markdown goes here -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" onclick="copyReportMarkdown()">
+          <i class="fa-solid fa-copy"></i> Copy Markdown
+        </button>
+        <button class="btn btn-accent" onclick="downloadReportFile()">
+          <i class="fa-solid fa-download"></i> Download Report
+        </button>
+        <button class="btn btn-primary" onclick="closeReportModal()">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = window.location.origin.startsWith('http') ? window.location.origin : 'http://localhost:8000';
+    let selectedAlertId = null;
+    let selectedAlertsSet = new Set();
+    let currentAlertsList = [];
+    let activeFilter = 'all';
+    let eventSource = null;
+    let activeTab = 'tab-triage';
+    let rawLogString = "";
+    let reportMarkdownCache = "";
+    let viewMode = 'alerts';
+    let selectedIncidentId = null;
+    let currentIncidentsList = [];
+
+    // Health Check & Server Status Poller
+    async function checkHealth() {
+      try {
+        const r = await fetch(`${API}/health`);
+        if (!r.ok) throw new Error("API Offline");
+        const d = await r.json();
+        
+        const dot = document.getElementById('status-dot');
+        dot.className = 'status-dot';
+        if (d.elasticsearch.status === 'connected') {
+          document.getElementById('status-text').innerHTML = 
+            `Connected · LLM: <strong style="color:var(--accent-cyan);text-transform:uppercase;">${d.llm_provider}</strong> · ES Status: <strong style="color:var(--low)">ONLINE</strong>`;
+        } else {
+          document.getElementById('status-text').innerHTML = 
+            `Connected · LLM: <strong style="color:var(--accent-cyan);text-transform:uppercase;">${d.llm_provider}</strong> · ES Status: <strong style="color:var(--high)">DISCONNECTED</strong>`;
+        }
+      } catch (err) {
+        const dot = document.getElementById('status-dot');
+        dot.className = 'status-dot error';
+        document.getElementById('status-text').innerHTML = `<span style="color:var(--critical)">Offline · SOC Core service API unreachable</span>`;
+      }
+    }
+
+    // Load Configuration Settings into Form
+    async function openSettingsModal() {
+      try {
+        const r = await fetch(`${API}/api/settings`);
+        const d = await r.json();
+        
+        document.getElementById('set-llm-provider').value = d.llm_provider;
+        document.getElementById('set-openai-key').value = d.openai_api_key_masked;
+        document.getElementById('set-openai-model').value = d.openai_model;
+        document.getElementById('set-ollama-url').value = d.ollama_base_url;
+        document.getElementById('set-ollama-model').value = d.ollama_model;
+        document.getElementById('set-es-host').value = d.elasticsearch_host;
+        document.getElementById('set-wazuh-index').value = d.wazuh_alerts_index;
+        document.getElementById('set-es-user').value = d.elasticsearch_user;
+        document.getElementById('set-es-pass').placeholder = d.elasticsearch_password_set ? "********" : "changeme (Optional)";
+        document.getElementById('set-poll-interval').value = d.alert_poll_interval_seconds;
+        document.getElementById('set-max-batch').value = d.max_alerts_per_batch;
+
+        toggleSettingsLLMView();
+        
+        document.getElementById('modal-settings').classList.add('active');
+      } catch (err) {
+        showToast("Error loading system configuration values.", "critical");
+      }
+    }
+
+    function toggleSettingsLLMView() {
+      const provider = document.getElementById('set-llm-provider').value;
+      const openaiFields = document.querySelectorAll('.openai-field');
+      const ollamaFields = document.querySelectorAll('.ollama-field');
+
+      if (provider === 'openai') {
+        openaiFields.forEach(f => f.style.display = 'flex');
+        ollamaFields.forEach(f => f.style.display = 'none');
+      } else {
+        openaiFields.forEach(f => f.style.display = 'none');
+        ollamaFields.forEach(f => f.style.display = 'flex');
+      }
+    }
+
+    function closeSettingsModal() {
+      document.getElementById('modal-settings').classList.remove('active');
+    }
+
+    // Save Settings
+    async function saveSettings(e) {
+      e.preventDefault();
+      
+      const payload = {
+        llm_provider: document.getElementById('set-llm-provider').value,
+        openai_api_key: document.getElementById('set-openai-key').value,
+        openai_model: document.getElementById('set-openai-model').value,
+        ollama_base_url: document.getElementById('set-ollama-url').value,
+        ollama_model: document.getElementById('set-ollama-model').value,
+        elasticsearch_host: document.getElementById('set-es-host').value,
+        wazuh_alerts_index: document.getElementById('set-wazuh-index').value,
+        elasticsearch_user: document.getElementById('set-es-user').value,
+        alert_poll_interval_seconds: parseInt(document.getElementById('set-poll-interval').value),
+        max_alerts_per_batch: parseInt(document.getElementById('set-max-batch').value)
+      };
+
+      const pass = document.getElementById('set-es-pass').value;
+      if (pass) {
+        payload.elasticsearch_password = pass;
+      }
+
+      try {
+        const r = await fetch(`${API}/api/settings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const d = await r.json();
+        
+        if (d.status === 'success') {
+          showToast("Configuration successfully updated. Services reloaded.");
+          closeSettingsModal();
+          checkHealth();
+          loadPrioritized();
+        } else {
+          showToast(d.message || "Failed to update configuration settings.", "critical");
+        }
+      } catch (err) {
+        showToast("Error updating settings credentials.", "critical");
+      }
+    }
+
+    // Load Ingested / Prioritized Alerts Queue
+    function setViewMode(mode) {
+      viewMode = mode;
+      const btnAlerts = document.getElementById('btn-view-alerts');
+      const btnIncidents = document.getElementById('btn-view-incidents');
+      const titleText = document.getElementById('queue-title-text');
+      
+      if (mode === 'alerts') {
+        btnAlerts.classList.add('active', 'btn-primary');
+        btnAlerts.classList.remove('btn-accent');
+        btnIncidents.classList.remove('active', 'btn-primary');
+        btnIncidents.classList.add('btn-accent');
+        titleText.textContent = "Alert Queue";
+        loadPrioritized();
+      } else {
+        btnIncidents.classList.add('active', 'btn-primary');
+        btnIncidents.classList.remove('btn-accent');
+        btnAlerts.classList.remove('active', 'btn-primary');
+        btnAlerts.classList.add('btn-accent');
+        titleText.textContent = "Correlated Incidents";
+        loadIncidents();
+      }
+    }
+
+    async function resetDemo() {
+      try {
+        currentAlertsList = [];
+        currentIncidentsList = [];
+        selectedAlertId = null;
+        selectedIncidentId = null;
+        selectedAlertsSet.clear();
+        updateBulkBanner();
+        applyFilters();
+        
+        document.getElementById('workspace-active').style.display = 'none';
+        document.getElementById('workspace-empty').style.display = 'flex';
+        
+        const r = await fetch(`${API}/demo/reset`, { method: 'POST' });
+        if (r.ok) {
+          showToast("Demo environment and cache reset successfully!");
+        } else {
+          showToast("Demo workspace cleared locally.");
+        }
+      } catch (err) {
+        showToast("Demo workspace cleared locally.");
+      }
+    }
+
+    function animateInvestigationWorkflow(callback) {
+      const summaryEl = document.getElementById('work-summary');
+      summaryEl.innerHTML = `
+        <h4 style="margin-bottom: 0.75rem; color:var(--accent-cyan); font-size: 0.9rem; font-weight: 600;"><i class="fa-solid fa-wand-magic-sparkles fa-bounce"></i> Dynamic SOC Investigation Pipeline</h4>
+        <div class="investigation-workflow" style="display:flex; flex-direction:column; gap:0.6rem; background:var(--bg-dark); border:1px solid var(--border-color); padding:1.25rem; border-radius:8px; font-size:0.8rem; font-family: monospace;">
+          <div class="wf-step" id="wf-1" style="color:var(--text-main)"><i class="fa-solid fa-circle-notch fa-spin"></i> 1. Alert Ingestion: Decoding and parsing log telemetry...</div>
+          <div class="wf-step" id="wf-2" style="color:var(--text-dark)"><i class="fa-solid fa-circle"></i> 2. Forensics: Running Indicators of Compromise (IOC) extraction</div>
+          <div class="wf-step" id="wf-3" style="color:var(--text-dark)"><i class="fa-solid fa-circle"></i> 3. MITRE Mapping: Correlation to ATT&CK Matrix tactics & techniques</div>
+          <div class="wf-step" id="wf-4" style="color:var(--text-dark)"><i class="fa-solid fa-circle"></i> 4. Threat Intel: Querying external reputational databases</div>
+          <div class="wf-step" id="wf-5" style="color:var(--text-dark)"><i class="fa-solid fa-circle"></i> 5. Correlation: Event clustering & multi-stage grouping</div>
+          <div class="wf-step" id="wf-6" style="color:var(--text-dark)"><i class="fa-solid fa-circle"></i> 6. AI Co-Pilot Report: Formulating final response layout</div>
+        </div>
+      `;
+
+      setTimeout(() => {
+        const wf1 = document.getElementById('wf-1');
+        if (wf1) wf1.innerHTML = `<i class="fa-solid fa-circle-check" style="color:var(--low)"></i> 1. Alert Ingestion: Ingested and parsed.`;
+        const wf2 = document.getElementById('wf-2');
+        if (wf2) {
+          wf2.style.color = 'var(--text-main)';
+          wf2.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> 2. Forensics: Extracting IPs, hashes, domains, processes...`;
+        }
+      }, 250);
+
+      setTimeout(() => {
+        const wf2 = document.getElementById('wf-2');
+        if (wf2) wf2.innerHTML = `<i class="fa-solid fa-circle-check" style="color:var(--low)"></i> 2. Forensics: IOC parsing completed.`;
+        const wf3 = document.getElementById('wf-3');
+        if (wf3) {
+          wf3.style.color = 'var(--text-main)';
+          wf3.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> 3. MITRE Mapping: Matching rule patterns against database...`;
+        }
+      }, 500);
+
+      setTimeout(() => {
+        const wf3 = document.getElementById('wf-3');
+        if (wf3) wf3.innerHTML = `<i class="fa-solid fa-circle-check" style="color:var(--low)"></i> 3. MITRE Mapping: Mapped to ATT&CK framework.`;
+        const wf4 = document.getElementById('wf-4');
+        if (wf4) {
+          wf4.style.color = 'var(--text-main)';
+          wf4.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> 4. Threat Intel: Querying API reputational databases...`;
+        }
+      }, 750);
+
+      setTimeout(() => {
+        const wf4 = document.getElementById('wf-4');
+        if (wf4) wf4.innerHTML = `<i class="fa-solid fa-circle-check" style="color:var(--low)"></i> 4. Threat Intel: Reputation check complete.`;
+        const wf5 = document.getElementById('wf-5');
+        if (wf5) {
+          wf5.style.color = 'var(--text-main)';
+          wf5.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> 5. Correlation: Running time-window attribute grouping...`;
+        }
+      }, 1000);
+
+      setTimeout(() => {
+        const wf5 = document.getElementById('wf-5');
+        if (wf5) wf5.innerHTML = `<i class="fa-solid fa-circle-check" style="color:var(--low)"></i> 5. Correlation: Correlated with web logs.`;
+        const wf6 = document.getElementById('wf-6');
+        if (wf6) {
+          wf6.style.color = 'var(--text-main)';
+          wf6.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> 6. AI Co-Pilot Report: Structuring analyst narrative...`;
+        }
+      }, 1250);
+
+      setTimeout(() => {
+        const wf6 = document.getElementById('wf-6');
+        if (wf6) wf6.innerHTML = `<i class="fa-solid fa-circle-check" style="color:var(--low)"></i> 6. AI Co-Pilot Report: Formulated.`;
+        setTimeout(callback, 100);
+      }, 1500);
+    }
+
+    async function loadIncidents() {
+      try {
+        const r = await fetch(`${API}/incidents/correlated`);
+        const d = await r.json();
+        currentIncidentsList = d.incidents;
+        selectedAlertsSet.clear();
+        updateBulkBanner();
+        applyFilters();
+      } catch (err) {
+        showToast("Error fetching incidents.", "critical");
+      }
+    }
+
+    function renderIncidentQueue(list) {
+      const el = document.getElementById('alert-list');
+      if (list.length === 0) {
+        el.innerHTML = `
+          <div style="padding: 2rem; text-align: center; color: var(--text-dark); font-size: 0.8rem;">
+            <i class="fa-solid fa-folder-open" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i>
+            No active incidents found.
+          </div>`;
+        return;
+      }
+
+      el.innerHTML = list.map(item => {
+        const isActive = selectedIncidentId === item.incident_id ? 'active' : '';
+        const formattedTime = new Date(item.last_seen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        return `
+          <div class="queue-item ${item.severity} ${isActive}" onclick="selectIncident('${item.incident_id}')">
+            <div class="queue-item-content">
+              <div class="queue-item-header">
+                <span class="priority-indicator ${item.severity}">${item.severity.toUpperCase()}</span>
+                <span class="item-score">${item.alert_count} Alerts</span>
+              </div>
+              <div class="queue-item-title" title="${item.title}">${item.title}</div>
+              <div class="queue-item-meta">
+                <span>Status: <strong>${item.status}</strong></span>
+                <span>${formattedTime}</span>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    async function selectIncident(id) {
+      selectedIncidentId = id;
+      selectedAlertId = null;
+      
+      document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('active'));
+      applyFilters();
+
+      document.getElementById('workspace-empty').style.display = 'none';
+      const workspace = document.getElementById('workspace-active');
+      workspace.style.display = 'flex';
+
+      const inc = currentIncidentsList.find(item => item.incident_id === id);
+      if (!inc) return;
+
+      document.getElementById('work-rule-desc').textContent = inc.title;
+      document.getElementById('work-meta-id').innerHTML = `<i class="fa-solid fa-tag"></i> Incident ID: <strong>${inc.incident_id}</strong>`;
+      document.getElementById('work-meta-host').innerHTML = `<i class="fa-solid fa-desktop"></i> Assets: <strong>${inc.affected_assets.join(', ') || 'None'}</strong>`;
+      document.getElementById('work-meta-user').innerHTML = `<i class="fa-solid fa-user"></i> Users: <strong>${inc.affected_users.join(', ') || 'None'}</strong>`;
+      document.getElementById('work-meta-time').innerHTML = `<i class="fa-solid fa-clock"></i> Ingested: <strong>${new Date(inc.first_seen).toLocaleString()}</strong>`;
+      
+      const badge = document.getElementById('work-priority-badge');
+      badge.className = `priority-indicator ${inc.severity}`;
+      badge.innerHTML = `
+        <select onchange="updateIncidentStatus('${inc.incident_id}', this.value)" style="background:var(--bg-dark); border:1px solid var(--border-color); color:var(--text-main); font-size:0.75rem; padding:0.15rem 0.35rem; border-radius:4px; font-weight:600; cursor:pointer;">
+          <option value="Open" ${inc.status === 'Open' ? 'selected' : ''}>OPEN</option>
+          <option value="Investigating" ${inc.status === 'Investigating' ? 'selected' : ''}>INVESTIGATING</option>
+          <option value="Resolved" ${inc.status === 'Resolved' ? 'selected' : ''}>RESOLVED</option>
+          <option value="Closed" ${inc.status === 'Closed' ? 'selected' : ''}>CLOSED</option>
+        </select>
+      `;
+
+      rawLogString = inc.alerts.map(a => `[Alert ${a.id} - ${a.timestamp}]\n${a.full_log}`).join('\n\n');
+      document.getElementById('work-raw-log').textContent = rawLogString;
+      document.getElementById('chat-quick-actions').style.display = 'flex';
+
+      renderIncidentTriage(inc);
+      
+      const mitreEl = document.getElementById('work-mitre-list');
+      if (inc.combined_mitre_techniques && inc.combined_mitre_techniques.length > 0) {
+        mitreEl.innerHTML = inc.combined_mitre_techniques.map(tid => `
+          <div class="mitre-card">
+            <div class="mitre-card-header">
+              <span class="mitre-id-badge">${tid}</span>
+            </div>
+            <div class="mitre-name">${tid} Technique</div>
+            <div class="mitre-tactic">Mapped via Incident alerts</div>
+          </div>
+        `).join('');
+      } else {
+        mitreEl.innerHTML = `
+          <div style="padding: 2rem; text-align: center; color: var(--text-dark); font-size: 0.8rem; border: 1px dashed var(--border-color); border-radius: 8px;">
+            No MITRE ATT&CK techniques mapped to this incident.
+          </div>`;
+      }
+
+      const remEl = document.getElementById('work-remediation-list');
+      remEl.innerHTML = `
+        <div class="remediation-item">
+          <span class="remediation-priority p1">P1</span>
+          <div class="remediation-body">
+            <span class="remediation-action">Isolate affected assets</span>
+            <span class="remediation-rationale">Assets affected: ${inc.affected_assets.join(', ') || 'N/A'}. Network isolation is highly recommended.</span>
+          </div>
+        </div>
+        <div class="remediation-item">
+          <span class="remediation-priority p2">P2</span>
+          <div class="remediation-body">
+            <span class="remediation-action">Investigate users credentials</span>
+            <span class="remediation-rationale">Users involved: ${inc.affected_users.join(', ') || 'N/A'}. Reset passwords and review logins.</span>
+          </div>
+        </div>
+      `;
+    }
+
+    async function renderIncidentTriage(inc) {
+      const summaryEl = document.getElementById('work-summary');
+      const narrativeEl = document.getElementById('work-narrative');
+      const indicatorsEl = document.getElementById('work-indicators');
+
+      const risk = inc.risk_score !== undefined ? inc.risk_score : (inc.severity === 'critical' ? 90.0 : 75.0);
+      const conf = inc.confidence_score !== undefined ? inc.confidence_score : 90.0;
+      const confLevel = inc.confidence_level !== undefined ? inc.confidence_level : 'Very High';
+      const corr = inc.correlation_score !== undefined ? inc.correlation_score : (inc.alert_count > 1 ? 90.0 : 0.0);
+
+      let flowHtml = '';
+      if (inc.attack_progression && inc.attack_progression.length > 0) {
+        flowHtml = `
+          <div style="background:var(--bg-dark); border:1px solid var(--border-color); padding:1rem; border-radius:8px; margin-bottom:1rem;">
+            <div style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.5rem;">Cyber Kill Chain Attack Progression</div>
+            <div style="display:flex; flex-wrap:wrap; align-items:center; gap:0.4rem; font-size:0.75rem;">
+              ${inc.attack_progression.map((step, idx) => `
+                <span style="background:rgba(6,182,212,0.1); color:var(--accent-cyan); border:1px solid rgba(6,182,212,0.3); padding:0.2rem 0.5rem; border-radius:4px; font-weight:600;">${step}</span>
+                ${idx < inc.attack_progression.length - 1 ? '<i class="fa-solid fa-arrow-right" style="color:var(--text-muted); font-size:0.7rem;"></i>' : ''}
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      const metadataHtml = `
+        <div style="background:var(--bg-dark); border:1px solid var(--border-color); padding:1rem; border-radius:8px; margin-bottom:1rem; font-size:0.75rem;">
+          <div style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.5rem;">Report Metadata</div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:0.5rem 1rem;">
+            <div><span style="color:var(--text-muted)">Version:</span> <strong>${inc.report_version || '2.3'}</strong></div>
+            <div><span style="color:var(--text-muted)">Author:</span> <strong>${inc.generated_by || 'AI SOC Analyst'}</strong></div>
+            <div><span style="color:var(--text-muted)">Model:</span> <strong>${inc.llm_model || 'Qwen2.5:3B'}</strong></div>
+            <div><span style="color:var(--text-muted)">Mode:</span> <strong>${inc.execution_mode || 'Offline Demo'}</strong></div>
+          </div>
+        </div>
+      `;
+
+      summaryEl.innerHTML = `
+        <div style="background:var(--bg-dark); border:1px solid var(--border-color); padding:1rem; border-radius:8px; margin-bottom:1rem; font-size:0.8rem;">
+          <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:1rem; text-align:center;">
+            <div style="border-right: 1px solid var(--border-color);">
+              <div style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">Risk Score</div>
+              <div style="font-size:1.1rem; font-weight:bold; color:var(--critical); margin-top:0.25rem;">${risk}/100</div>
+            </div>
+            <div style="border-right: 1px solid var(--border-color);">
+              <div style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">Confidence</div>
+              <div style="font-size:1.1rem; font-weight:bold; color:var(--low); margin-top:0.25rem;">${conf}%</div>
+              <div style="font-size:0.65rem; color:var(--text-muted); font-weight:500; margin-top:0.1rem;">${confLevel}</div>
+            </div>
+            <div>
+              <div style="font-size:0.65rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em;">Correlation</div>
+              <div style="font-size:1.1rem; font-weight:bold; color:var(--accent-cyan); margin-top:0.25rem;">${corr}%</div>
+            </div>
+          </div>
+        </div>
+        
+        ${flowHtml}
+        ${metadataHtml}
+        
+        <p><strong>Correlated Incident</strong> containing ${inc.alert_count} security alerts. Overall severity is <strong>${inc.severity.toUpperCase()}</strong>.</p>
+        <div class="incident-report-controls" style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+          <button class="btn btn-accent" onclick="downloadIncidentReportFile(event, '${inc.incident_id}', 'markdown')"><i class="fa-solid fa-file-markdown"></i> Markdown</button>
+          <button class="btn btn-accent" onclick="downloadIncidentReportFile(event, '${inc.incident_id}', 'pdf')"><i class="fa-solid fa-file-pdf"></i> PDF</button>
+          <button class="btn btn-accent" onclick="downloadIncidentReportFile(event, '${inc.incident_id}', 'json')"><i class="fa-solid fa-file-code"></i> JSON</button>
+        </div>
+      `;
+
+      narrativeEl.innerHTML = `
+        <p>This incident aggregates multiple security observations across a window:</p>
+        <ul>
+          ${inc.timeline.map(evt => `<li>${evt}</li>`).join('')}
+        </ul>
+      `;
+
+      const uniqueIocs = new Set();
+      inc.alerts.forEach(a => {
+        if (a.source_ip) uniqueIocs.add(a.source_ip);
+        if (a.destination_ip) uniqueIocs.add(a.destination_ip);
+        if (a.username) uniqueIocs.add(a.username);
+      });
+      
+      const iocList = Array.from(uniqueIocs).filter(ioc => ioc && ioc !== 'SYSTEM' && ioc !== 'admin');
+      
+      if (iocList.length > 0) {
+        indicatorsEl.innerHTML = `<p style="color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Fetching threat intelligence enrichment...</p>`;
+        
+        let cards = '';
+        for (const ioc of iocList) {
+          try {
+            const r = await fetch(`${API}/api/iocs/enrich?value=${encodeURIComponent(ioc)}`);
+            if (!r.ok) throw new Error();
+            const d = await r.json();
+            
+            const isMal = d.reputation === 'malicious';
+            const repColor = isMal ? 'var(--critical)' : (d.reputation === 'suspicious' ? 'var(--medium)' : 'var(--low)');
+            
+            const isMocked = d.source.toLowerCase().includes('mocked');
+            const sourceLabel = isMocked ? `<span style="color:var(--medium); font-weight:bold; letter-spacing:0.02em;">${d.source}</span>` : `<span style="color:var(--accent-cyan); font-weight:bold; letter-spacing:0.02em;">${d.source}</span>`;
+            cards += `
+              <div class="indicator-card" style="border-left: 3px solid ${repColor}">
+                <div>
+                  <span class="indicator-value" title="${ioc}">${ioc}</span>
+                  <div style="font-size:0.65rem; color:var(--text-muted); margin-top:0.15rem;">
+                    Source: ${sourceLabel} | ${d.detection_stats}
+                  </div>
+                </div>
+                <div class="indicator-actions">
+                  <span class="priority-indicator" style="font-size:0.65rem; color:${repColor}; border-color:${repColor}; background:transparent;">${d.reputation.toUpperCase()}</span>
+                </div>
+              </div>`;
+          } catch (err) {
+            cards += `
+              <div class="indicator-card">
+                <span class="indicator-value" title="${ioc}">${ioc}</span>
+                <div class="indicator-actions">
+                  <span class="priority-indicator info" style="font-size:0.65rem">IOC</span>
+                </div>
+              </div>`;
+          }
+        }
+        indicatorsEl.innerHTML = cards;
+      } else {
+        indicatorsEl.innerHTML = `<p style="color:var(--text-dark); font-size:0.8rem">No external indicators identified.</p>`;
+      }
+    }
+
+    async function downloadIncidentReportFile(event, incidentId, format) {
+      const btn = event.currentTarget;
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Preparing...`;
+      
+      const inc = currentIncidentsList.find(i => i.incident_id === incidentId);
+      if (!inc) {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        return;
+      }
+      const alertIds = inc.alerts.map(a => a.id);
+      
+      try {
+        const r = await fetch(`${API}/api/reports/download?format=${format}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(alertIds)
+        });
+        if (!r.ok) throw new Error();
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `incident_report_${incidentId}.${format === 'markdown' ? 'md' : format}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast("Report downloaded successfully.", "low");
+      } catch (err) {
+        showToast("Error downloading report.", "critical");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+      }
+    }
+
+    async function updateIncidentStatus(incidentId, status) {
+      try {
+        const r = await fetch(`${API}/api/incidents/${incidentId}/status`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: status })
+        });
+        if (!r.ok) throw new Error();
+        showToast(`Incident status updated to ${status}.`);
+        loadIncidents();
+      } catch (err) {
+        showToast("Error updating status.", "critical");
+      }
+    }
+
+    async function loadPrioritized() {
+      try {
+        const r = await fetch(`${API}/alerts/prioritized?limit=40`);
+        const d = await r.json();
+        
+        // Map priority_score on alerts list to match standard structure
+        currentAlertsList = d.alerts.map(item => ({
+          id: item.alert.id,
+          priority_score: item.priority_score,
+          severity: item.severity,
+          rule_description: item.alert.rule_description,
+          agent_name: item.alert.agent_name,
+          source_ip: item.alert.source_ip,
+          timestamp: item.alert.timestamp,
+          alert: item.alert
+        }));
+        
+        selectedAlertsSet.clear();
+        updateBulkBanner();
+        applyFilters();
+      } catch (err) {
+        showToast("Error fetching alerts from Elasticsearch index.", "critical");
+      }
+    }
+
+    // Load Demo Events
+    async function loadDemo() {
+      showToast("Triggering mock triage pipeline...");
+      try {
+        const r = await fetch(`${API}/demo/analyze`, { method: 'POST' });
+        const d = await r.json();
+        
+        currentAlertsList = d.analyses.map(a => {
+          const alertItem = d.alerts ? d.alerts.find(al => al.id === a.alert_id) : null;
+          return {
+            id: a.alert_id,
+            priority_score: a.priority_score,
+            severity: a.severity,
+            rule_description: a.summary,
+            agent_name: a.affected_assets[0] || 'mock-host',
+            source_ip: a.indicators[0] || '127.0.0.1',
+            timestamp: a.analyzed_at,
+            analysis: a, // Cache analysis object directly
+            alert: alertItem || {
+              id: a.alert_id,
+              timestamp: a.analyzed_at,
+              rule_description: a.summary,
+              full_log: a.attack_narrative || "Mock event payload logs",
+              agent_name: a.affected_assets[0] || 'mock-host',
+              source_ip: a.indicators[0] || '127.0.0.1',
+            }
+          };
+        });
+
+        selectedAlertsSet.clear();
+        updateBulkBanner();
+        
+        // Fetch all updates
+        await loadIncidents();
+        await loadPrioritized();
+        
+        if (currentAlertsList.length > 0) {
+          selectAlert(currentAlertsList[0].id);
+        }
+        showToast("Triaged 3 sample SIEM events successfully!");
+      } catch (err) {
+        showToast("Failed to run demo pipeline.", "critical");
+      }
+    }
+
+    // Toggle Real-time SSE Stream
+    function toggleStream() {
+      const btn = document.getElementById('btn-stream');
+      
+      if (eventSource) {
+        // Stop stream
+        eventSource.close();
+        eventSource = null;
+        btn.className = "btn btn-accent";
+        btn.innerHTML = `<i class="fa-solid fa-tower-broadcast"></i> Live Stream`;
+        showToast("Stopped real-time ingestion stream monitoring.");
+      } else {
+        // Start stream
+        btn.className = "btn btn-critical";
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Disconnect Stream`;
+        showToast("Ingestion Stream Active. Watching wazuh-alerts-*...");
+        
+        eventSource = new EventSource(`${API}/stream/alerts`);
+        eventSource.addEventListener('alert_analysis', e => {
+          const a = JSON.parse(e.data);
+          
+          const idx = currentAlertsList.findIndex(item => item.id === a.alert_id);
+          const mappedAlert = {
+            id: a.alert_id,
+            priority_score: a.priority_score,
+            severity: a.severity,
+            rule_description: a.summary,
+            agent_name: a.affected_assets[0] || 'agent',
+            source_ip: a.indicators[0] || '0.0.0.0',
+            timestamp: a.analyzed_at,
+            analysis: a,
+            alert: {
+              id: a.alert_id,
+              timestamp: a.analyzed_at,
+              rule_description: a.summary,
+              full_log: a.attack_narrative,
+              agent_name: a.affected_assets[0],
+              source_ip: a.indicators[0]
+            }
+          };
+
+          if (idx >= 0) {
+            currentAlertsList[idx] = mappedAlert;
+          } else {
+            currentAlertsList.unshift(mappedAlert);
+          }
+          
+          showToast(`Ingested Dynamic Threat: ${a.summary.slice(0, 45)}...`, a.severity);
+          applyFilters();
+          
+          if (!selectedAlertId) {
+            selectAlert(a.alert_id);
+          }
+        });
+      }
+    }
+
+    // Filter Alert Queue
+    function filterQueue(severity) {
+      activeFilter = severity;
+      
+      const metrics = document.querySelectorAll('.sidebar-metric');
+      metrics.forEach(m => m.classList.remove('active'));
+      const activeMetric = document.querySelector(`.sidebar-metric.${severity === 'all' ? 'total' : severity}`);
+      if (activeMetric) activeMetric.classList.add('active');
+      
+      applyFilters();
+    }
+
+    // Apply Filter & Search Query
+    function applyFilters() {
+      const q = document.getElementById('queue-search').value.toLowerCase();
+      
+      if (viewMode === 'alerts') {
+        let filtered = currentAlertsList;
+        if (activeFilter !== 'all') {
+          filtered = filtered.filter(item => item.severity === activeFilter);
+        }
+        if (q) {
+          filtered = filtered.filter(item => 
+            item.rule_description.toLowerCase().includes(q) || 
+            item.agent_name.toLowerCase().includes(q) || 
+            item.source_ip.toLowerCase().includes(q) ||
+            item.id.toLowerCase().includes(q)
+          );
+        }
+        renderAlertQueue(filtered);
+        document.getElementById('queue-showing-text').textContent = `Showing ${filtered.length} of ${currentAlertsList.length} alerts`;
+      } else {
+        let filtered = currentIncidentsList;
+        if (activeFilter !== 'all') {
+          filtered = filtered.filter(item => item.severity === activeFilter);
+        }
+        if (q) {
+          filtered = filtered.filter(item => 
+            item.title.toLowerCase().includes(q) || 
+            item.incident_id.toLowerCase().includes(q) ||
+            item.status.toLowerCase().includes(q)
+          );
+        }
+        renderIncidentQueue(filtered);
+        document.getElementById('queue-showing-text').textContent = `Showing ${filtered.length} of ${currentIncidentsList.length} incidents`;
+      }
+      updateMetrics();
+      document.getElementById('last-updated-text').textContent = `Last Updated: ${new Date().toLocaleTimeString()}`;
+    }
+
+    // Update Sidebar Metrics
+    function updateMetrics() {
+      const sourceList = viewMode === 'alerts' ? currentAlertsList : currentIncidentsList;
+      const counts = { critical: 0, high: 0, medium: 0, low: 0, total: sourceList.length };
+      sourceList.forEach(item => {
+        if (counts[item.severity] !== undefined) {
+          counts[item.severity]++;
+        }
+      });
+
+      document.getElementById('count-critical').textContent = counts.critical;
+      document.getElementById('count-high').textContent = counts.high;
+      document.getElementById('count-medium').textContent = counts.medium;
+      document.getElementById('count-low').textContent = counts.low;
+      document.getElementById('count-total').textContent = counts.total;
+    }
+
+    // Render Alert Queue UI List
+    function renderAlertQueue(list) {
+      const el = document.getElementById('alert-list');
+      if (list.length === 0) {
+        el.innerHTML = `
+          <div style="padding: 2rem; text-align: center; color: var(--text-dark); font-size: 0.8rem;">
+            <i class="fa-solid fa-magnifying-glass-chart" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i>
+            No matching events found.
+          </div>`;
+        return;
+      }
+
+      el.innerHTML = list.map(item => {
+        const isChecked = selectedAlertsSet.has(item.id) ? 'checked' : '';
+        const isActive = selectedAlertId === item.id ? 'active' : '';
+        const formattedTime = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        
+        return `
+          <div class="queue-item ${item.severity} ${isActive}" onclick="handleQueueItemClick(event, '${item.id}')">
+            <div class="checkbox-wrapper">
+              <input type="checkbox" ${isChecked} onclick="toggleAlertSelection(event, '${item.id}')" />
+            </div>
+            <div class="queue-item-content">
+              <div class="queue-item-header">
+                <span class="priority-indicator ${item.severity}">${item.severity.toUpperCase()}</span>
+                <span class="item-score">${item.priority_score.toFixed(0)}</span>
+              </div>
+              <div class="queue-item-title" title="${item.rule_description}">${item.rule_description}</div>
+              <div class="queue-item-meta">
+                <span>${item.agent_name || 'unknown'}</span>
+                <span>${formattedTime}</span>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // Handle selection and display in detail view
+    function handleQueueItemClick(event, id) {
+      if (event.target.type === 'checkbox') return;
+      selectAlert(id);
+    }
+
+    function toggleAlertSelection(event, id) {
+      event.stopPropagation();
+      if (selectedAlertsSet.has(id)) {
+        selectedAlertsSet.delete(id);
+      } else {
+        selectedAlertsSet.add(id);
+      }
+      
+      updateBulkBanner();
+      // Rerender just to update checkbox UI state properly
+      applyFilters();
+    }
+
+    function updateBulkBanner() {
+      const banner = document.getElementById('bulk-banner');
+      const text = document.getElementById('bulk-banner-text');
+      
+      if (selectedAlertsSet.size > 0) {
+        text.innerHTML = `<i class="fa-solid fa-circle-check" style="color:var(--accent-cyan)"></i> <strong>${selectedAlertsSet.size}</strong> Alert${selectedAlertsSet.size > 1 ? 's' : ''} Selected`;
+        banner.classList.add('visible');
+      } else {
+        banner.classList.remove('visible');
+      }
+    }
+
+    function clearSelection() {
+      selectedAlertsSet.clear();
+      updateBulkBanner();
+      applyFilters();
+    }
+
+    // Select and fetch single Alert details
+    async function selectAlert(id) {
+      selectedAlertId = id;
+      
+      // Update Queue list highlight active state
+      document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('active'));
+      applyFilters();
+
+      document.getElementById('workspace-empty').style.display = 'none';
+      const workspace = document.getElementById('workspace-active');
+      workspace.style.display = 'flex';
+
+      // Load Cached or fetch Analysis Details
+      const alertMeta = currentAlertsList.find(item => item.id === id);
+      if (!alertMeta) return;
+
+      // Populate basic header metadata immediately
+      document.getElementById('work-rule-desc').textContent = alertMeta.rule_description;
+      document.getElementById('work-meta-id').innerHTML = `<i class="fa-solid fa-tag"></i> ID: <strong>${alertMeta.id.slice(0, 12)}...</strong>`;
+      document.getElementById('work-meta-host').innerHTML = `<i class="fa-solid fa-desktop"></i> Host: <strong>${alertMeta.agent_name || 'N/A'}</strong>`;
+      document.getElementById('work-meta-user').innerHTML = `<i class="fa-solid fa-user"></i> User: <strong>${alertMeta.alert.username || 'N/A'}</strong>`;
+      document.getElementById('work-meta-time').innerHTML = `<i class="fa-solid fa-clock"></i> Ingested: <strong>${new Date(alertMeta.timestamp).toLocaleString()}</strong>`;
+      
+      const badge = document.getElementById('work-priority-badge');
+      badge.className = `priority-indicator ${alertMeta.severity}`;
+      badge.textContent = `${alertMeta.severity.toUpperCase()} (Priority: ${alertMeta.priority_score.toFixed(0)})`;
+
+      // Set raw log
+      rawLogString = alertMeta.alert.raw_log || (alertMeta.alert.raw && Object.keys(alertMeta.alert.raw).length > 0 ? JSON.stringify(alertMeta.alert.raw, null, 2) : alertMeta.alert.full_log || JSON.stringify(alertMeta.alert, null, 2));
+      document.getElementById('work-raw-log').textContent = rawLogString;
+
+      // Show Chat Quick Actions
+      document.getElementById('chat-quick-actions').style.display = 'flex';
+
+      // If we already have the analysis cached in object
+      if (alertMeta.analysis) {
+        animateInvestigationWorkflow(() => {
+          if (selectedAlertId === id) {
+            renderAnalysisDetails(alertMeta.analysis);
+          }
+        });
+      } else {
+        // Fetch from backend API
+        renderAnalysisLoading();
+        try {
+          const r = await fetch(`${API}/alerts/${id}/analysis`);
+          if (!r.ok) throw new Error();
+          const d = await r.json();
+          alertMeta.analysis = d; // Cache it
+          
+          if (selectedAlertId === id) {
+            animateInvestigationWorkflow(() => {
+              if (selectedAlertId === id) {
+                renderAnalysisDetails(d);
+              }
+            });
+          }
+        } catch (err) {
+          if (selectedAlertId === id) {
+            renderAnalysisError();
+          }
+        }
+      }
+    }
+
+    // Toggle Workspace Tabs
+    function switchTab(tabId) {
+      activeTab = tabId;
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.outerHTML.includes(tabId)) btn.classList.add('active');
+      });
+
+      // Update tab active button by iteration matching onClick
+      const buttons = document.querySelectorAll('.tab-btn');
+      buttons.forEach(btn => {
+        if (btn.getAttribute('onclick').includes(tabId)) {
+          btn.classList.add('active');
+        } else {
+          btn.classList.remove('active');
+        }
+      });
+
+      document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.classList.remove('active');
+      });
+      document.getElementById(tabId).classList.add('active');
+    }
+
+    // Render loading states
+    function renderAnalysisLoading() {
+      document.getElementById('work-summary').innerHTML = `<p style="color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Triggering AI triage models, performing MITRE lookups and threat analysis...</p>`;
+      document.getElementById('work-narrative').innerHTML = "Loading...";
+      document.getElementById('work-indicators').innerHTML = "";
+      document.getElementById('work-mitre-list').innerHTML = `<div style="color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Mapping vectors...</div>`;
+      document.getElementById('work-remediation-list').innerHTML = `<div style="color:var(--text-muted)"><i class="fa-solid fa-spinner fa-spin"></i> Generating recommendations...</div>`;
+      document.getElementById('work-false-positive').textContent = "False Positive Likelihood: Calculating...";
+      document.getElementById('work-analyzed-at').textContent = "";
+    }
+
+    function renderAnalysisError() {
+      document.getElementById('work-summary').innerHTML = `<p style="color:var(--critical)"><i class="fa-solid fa-triangle-exclamation"></i> Error running automated triage. Ensure the LLM Provider config is correct and valid API keys are supplied.</p>`;
+      document.getElementById('work-mitre-list').innerHTML = `<div style="color:var(--text-dark)">Triage unavailable.</div>`;
+      document.getElementById('work-remediation-list').innerHTML = `<div style="color:var(--text-dark)">Triage unavailable.</div>`;
+    }
+
+    // Render Analysis Details onto Tabs
+    function renderAnalysisDetails(a) {
+      document.getElementById('work-summary').innerHTML = marked.parse(a.summary);
+      document.getElementById('work-narrative').innerHTML = marked.parse(a.attack_narrative || "*No attack narrative could be compiled from this alert.*");
+      
+      // Indicators Grid
+      const indContainer = document.getElementById('work-indicators');
+      if (a.indicators.length > 0 || a.affected_assets.length > 0) {
+        let cards = '';
+        a.affected_assets.forEach(asset => {
+          cards += `
+            <div class="indicator-card">
+              <span class="indicator-value"><i class="fa-solid fa-server" style="color:var(--accent-cyan); margin-right:0.35rem"></i>${asset}</span>
+              <div class="indicator-actions">
+                <span class="priority-indicator info" style="font-size:0.65rem">ASSET</span>
+              </div>
+            </div>`;
+        });
+        a.indicators.forEach(ioc => {
+          const type = ioc.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/) ? 'IP' : 
+                       (ioc.includes('@') ? 'USER' : 'IOC');
+          cards += `
+            <div class="indicator-card">
+              <span class="indicator-value" title="${ioc}">${ioc}</span>
+              <div class="indicator-actions">
+                <a class="indicator-action-btn" href="https://www.virustotal.com/gui/search/${encodeURIComponent(ioc)}" target="_blank" title="Search VirusTotal">
+                  <i class="fa-solid fa-shield-virus"></i>
+                </a>
+                <span class="priority-indicator info" style="font-size:0.65rem; background:rgba(168,85,247,0.15); color:#a855f7; border-color:rgba(168,85,247,0.3)">${type}</span>
+              </div>
+            </div>`;
+        });
+        indContainer.innerHTML = cards;
+      } else {
+        indContainer.innerHTML = `<p style="color:var(--text-dark); font-size:0.8rem">No specific IOCs or affected endpoints identified.</p>`;
+      }
+
+      document.getElementById('work-false-positive').innerHTML = `False Positive Likelihood: <strong style="color:var(--accent-purple); text-transform:uppercase;">${a.false_positive_likelihood}</strong>`;
+      document.getElementById('work-analyzed-at').textContent = `Triage Completed: ${new Date(a.analyzed_at).toLocaleTimeString()}`;
+
+      // MITRE Mapping
+      const mitreEl = document.getElementById('work-mitre-list');
+      if (a.mitre_mappings && a.mitre_mappings.length > 0) {
+        mitreEl.innerHTML = a.mitre_mappings.map(m => `
+          <div class="mitre-card">
+            <div class="mitre-card-header">
+              <span class="mitre-id-badge">${m.technique_id}</span>
+              <span class="mitre-confidence">Confidence: <span>${(m.confidence * 100).toFixed(0)}%</span></span>
+            </div>
+            <div class="mitre-name">${m.technique_name}</div>
+            <div class="mitre-tactic">${m.tactic}</div>
+            <div class="mitre-description">${m.description}</div>
+          </div>
+        `).join('');
+      } else {
+        mitreEl.innerHTML = `
+          <div style="padding: 2rem; text-align: center; color: var(--text-dark); font-size: 0.8rem; border: 1px dashed var(--border-color); border-radius: 8px;">
+            <i class="fa-solid fa-network-wired" style="font-size: 1.5rem; margin-bottom: 0.5rem; display: block;"></i>
+            No MITRE ATT&CK techniques mapped to this alert profile.
+          </div>`;
+      }
+
+      // Remediation Checklist
+      const remEl = document.getElementById('work-remediation-list');
+      if (a.remediation_steps && a.remediation_steps.length > 0) {
+        remEl.innerHTML = a.remediation_steps.map(s => `
+          <div class="remediation-item">
+            <span class="remediation-priority p${s.priority}">P${s.priority}</span>
+            <div class="remediation-body">
+              <span class="remediation-action">${s.action}</span>
+              <span class="remediation-rationale">${s.rationale}</span>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        remEl.innerHTML = `
+          <div class="remediation-item">
+            <span class="remediation-priority p3">P3</span>
+            <div class="remediation-body">
+              <span class="remediation-action">Review alert logs manually</span>
+              <span class="remediation-rationale">No custom remediation workflow generated by LLM. Perform standard triage.</span>
+            </div>
+          </div>`;
+      }
+    }
+
+    // Copy Forensic Raw log
+    function copyRawLog() {
+      navigator.clipboard.writeText(rawLogString);
+      showToast("Raw security log copied to clipboard.");
+    }
+
+    // AI Co-Pilot Chat System
+    function handleChatKey(e) {
+      if (e.key === 'Enter') sendChatMessage();
+    }
+
+    async function sendChatMessage() {
+      const input = document.getElementById('chat-input');
+      const msg = input.value.trim();
+      if (!msg) return;
+
+      appendChatMessage(msg, 'user');
+      input.value = '';
+
+      const typingIdx = appendChatTyping();
+      
+      try {
+        const payload = { message: msg };
+        if (selectedAlertId) {
+          payload.alert_id = selectedAlertId;
+        } else if (selectedIncidentId) {
+          payload.incident_id = selectedIncidentId;
+        }
+
+        const r = await fetch(`${API}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const d = await r.json();
+        
+        removeChatTyping(typingIdx);
+        appendChatMessage(d.response, 'bot');
+      } catch (err) {
+        removeChatTyping(typingIdx);
+        appendChatMessage("Sorry, I encountered an error. Please verify the AI endpoint configuration.", 'bot');
+      }
+    }
+
+    function sendQuickPrompt(promptText) {
+      appendChatMessage(promptText, 'user');
+      const typingIdx = appendChatTyping();
+      
+      const payload = { message: promptText };
+      if (selectedAlertId) payload.alert_id = selectedAlertId; else if (selectedIncidentId) payload.incident_id = selectedIncidentId;
+
+      fetch(`${API}/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      .then(r => r.json())
+      .then(d => {
+        removeChatTyping(typingIdx);
+        appendChatMessage(d.response, 'bot');
+      })
+      .catch(() => {
+        removeChatTyping(typingIdx);
+        appendChatMessage("Sorry, I encountered an error.", 'bot');
+      });
+    }
+
+    function appendChatMessage(text, sender) {
+      const container = document.getElementById('chat-messages');
+      const div = document.createElement('div');
+      div.className = `chat-msg ${sender}`;
+      
+      if (sender === 'bot') {
+        div.innerHTML = marked.parse(text);
+      } else {
+        div.textContent = text;
+      }
+      
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function appendChatTyping() {
+      const container = document.getElementById('chat-messages');
+      const div = document.createElement('div');
+      div.className = 'chat-msg bot typing-indicator';
+      div.innerHTML = `<i class="fa-solid fa-ellipsis fa-bounce"></i> Analyst is thinking...`;
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+      return div;
+    }
+
+    function removeChatTyping(el) {
+      if (el && el.parentNode) {
+        el.parentNode.removeChild(el);
+      }
+    }
+
+    // Incident Report Compilation & Modal View
+    async function generateIncidentReport() {
+      if (selectedAlertsSet.size === 0) return;
+      showToast("Compiling analysis timeline & reports...");
+      
+      const payload = {
+        alert_ids: Array.from(selectedAlertsSet),
+        title: "AI Security Operations Center Incident Report"
+      };
+
+      try {
+        const r = await fetch(`${API}/incidents/report`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload.alert_ids) // Endpoint takes a raw list of strings
+        });
+        const d = await r.json();
+        
+        reportMarkdownCache = d.markdown;
+        document.getElementById('report-rendered-html').innerHTML = marked.parse(d.markdown);
+        document.getElementById('modal-report').classList.add('active');
+        clearSelection();
+      } catch (err) {
+        showToast("Error compiling report.", "critical");
+      }
+    }
+
+    function closeReportModal() {
+      document.getElementById('modal-report').classList.remove('active');
+    }
+
+    function copyReportMarkdown() {
+      navigator.clipboard.writeText(reportMarkdownCache);
+      showToast("Incident report markdown copied to clipboard.");
+    }
+
+    function downloadReportFile() {
+      const blob = new Blob([reportMarkdownCache], { type: 'text/markdown' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `incident_report_${new Date().toISOString().slice(0,10)}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast("Incident report downloaded.");
+    }
+
+    // Utility toast notifications
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      toast.className = `toast`;
+      
+      let icon = '<i class="fa-solid fa-circle-info" style="color:var(--accent-cyan)"></i>';
+      if (type === 'critical' || type === 'high') {
+        icon = '<i class="fa-solid fa-triangle-exclamation" style="color:var(--critical)"></i>';
+        toast.style.borderColor = 'var(--critical)';
+      } else if (type === 'medium') {
+        icon = '<i class="fa-solid fa-circle-exclamation" style="color:var(--medium)"></i>';
+        toast.style.borderColor = 'var(--medium)';
+      } else if (type === 'low') {
+        icon = '<i class="fa-solid fa-circle-check" style="color:var(--low)"></i>';
+        toast.style.borderColor = 'var(--low)';
+      }
+      
+      toast.innerHTML = `${icon} <span>${message}</span>`;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.animation = 'slideIn 0.3s reverse forwards';
+        setTimeout(() => {
+          if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 300);
+      }, 3500);
+    }
+
+    // Initial load
+    checkHealth();
+    loadPrioritized();
+    setInterval(checkHealth, 30000);
+  </script>
+</body>
+</html>

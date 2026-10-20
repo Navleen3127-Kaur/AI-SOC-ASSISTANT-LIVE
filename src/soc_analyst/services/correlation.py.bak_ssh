@@ -1,0 +1,231 @@
+"""Alert correlation service for grouping related alerts into incidents."""
+
+import hashlib
+import logging
+from datetime import datetime
+from pydantic import BaseModel, Field
+
+from soc_analyst.models.schemas import SecurityAlert, Severity
+
+logger = logging.getLogger(__name__)
+
+
+class CorrelatedIncident(BaseModel):
+    incident_id: str
+    title: str
+    severity: Severity
+    overall_severity: Severity
+    alert_count: int = 0
+    alerts: list[SecurityAlert] = Field(default_factory=list)
+    timeline: list[str] = Field(default_factory=list)
+    affected_assets: list[str] = Field(default_factory=list)
+    affected_users: list[str] = Field(default_factory=list)
+    combined_mitre_techniques: list[str] = Field(default_factory=list)
+    mitre_tactics: list[str] = Field(default_factory=list)
+    common_agent: str | None = None
+    common_ip: str | None = None
+    common_user: str | None = None
+    first_seen: datetime
+    last_seen: datetime
+
+
+class AlertCorrelator:
+    """Groups related SecurityAlerts into CorrelatedIncidents using attribute clustering."""
+
+    @staticmethod
+    def correlate(
+        alerts: list[SecurityAlert], time_window_seconds: int = 7200
+    ) -> list[CorrelatedIncident]:
+        """Correlates alerts by source/dest IPs, usernames, processes, and agents within a time window."""
+        if not alerts:
+            return []
+
+        n = len(alerts)
+        adj = {i: set() for i in range(n)}
+
+        IGNORE_USERS = {
+            "system",
+            "nt authority\\system",
+            "root",
+            "daemon",
+            "none",
+            "",
+            "network service",
+            "local service",
+        }
+        IGNORE_IPS = {"0.0.0.0", "255.255.255.255", "127.0.0.1", ""}
+        IGNORE_PROCS = {"svchost.exe", "explorer.exe", "cmd.exe", "powershell.exe", "bash", "sudo", "system"}
+
+        def is_related(a1: SecurityAlert, a2: SecurityAlert) -> bool:
+            # Prevent merging/correlating live alerts with demo/seeded alerts
+            if a1.id.startswith("demo-") != a2.id.startswith("demo-"):
+                return False
+
+            time_diff = abs((a1.timestamp - a2.timestamp).total_seconds())
+            if time_diff > time_window_seconds:
+                return False
+
+            # 1. IP correlation (Source or Destination)
+            if (
+                a1.source_ip
+                and a1.source_ip not in IGNORE_IPS
+                and a1.source_ip == a2.source_ip
+            ):
+                return True
+            if (
+                a1.destination_ip
+                and a1.destination_ip not in IGNORE_IPS
+                and a1.destination_ip == a2.destination_ip
+            ):
+                return True
+
+            # 2. Same host/agent
+            if a1.agent_name and a1.agent_name == a2.agent_name:
+                return True
+            # 3. Same user
+            if (
+                a1.username
+                and a1.username.lower() not in IGNORE_USERS
+                and a1.username.lower() == a2.username.lower()
+            ):
+                return True
+            # 4. Process Name correlation on same host
+            if a1.agent_name and a1.agent_name == a2.agent_name:
+                from soc_analyst.services.ioc_extractor import IOCOxtractor
+                p1 = set(IOCOxtractor.extract_process_names(a1.full_log))
+                p2 = set(IOCOxtractor.extract_process_names(a2.full_log))
+                shared = p1 & p2 - IGNORE_PROCS
+                if shared:
+                    return True
+
+            return False
+
+        # Build connection graph
+        for i in range(n):
+            for j in range(i + 1, n):
+                if is_related(alerts[i], alerts[j]):
+                    adj[i].add(j)
+                    adj[j].add(i)
+
+        # Connected components traversal (BFS)
+        visited = [False] * n
+        components = []
+        for i in range(n):
+            if not visited[i]:
+                comp = []
+                queue = [i]
+                visited[i] = True
+                while queue:
+                    curr = queue.pop(0)
+                    comp.append(curr)
+                    for neighbor in adj[curr]:
+                        if not visited[neighbor]:
+                            # Ensure that adding the neighbor does not violate the time window for any alert already in the component
+                            neighbor_alert = alerts[neighbor]
+                            if all(abs((alerts[idx].timestamp - neighbor_alert.timestamp).total_seconds()) <= time_window_seconds for idx in comp):
+                                visited[neighbor] = True
+                                queue.append(neighbor)
+                components.append(comp)
+
+        # Build incident objects from components
+        incidents = []
+        for idx_list in components:
+            comp_alerts = [alerts[idx] for idx in idx_list]
+            comp_alerts.sort(key=lambda a: a.timestamp)
+
+            # Analyze shared parameters
+            agents = {a.agent_name for a in comp_alerts if a.agent_name}
+            ips = {
+                a.source_ip
+                for a in comp_alerts
+                if a.source_ip and a.source_ip not in IGNORE_IPS
+            }
+            users = {
+                a.username
+                for a in comp_alerts
+                if a.username and a.username.lower() not in IGNORE_USERS
+            }
+
+            common_agent = list(agents)[0] if len(agents) == 1 else None
+            common_ip = list(ips)[0] if len(ips) == 1 else None
+            common_user = list(users)[0] if len(users) == 1 else None
+
+            first_seen = comp_alerts[0].timestamp
+            last_seen = comp_alerts[-1].timestamp
+
+            # Maximum alert severity determines incident severity
+            severities = [a.severity_hint for a in comp_alerts]
+            severity_order = {
+                Severity.INFO: 0,
+                Severity.LOW: 1,
+                Severity.MEDIUM: 2,
+                Severity.HIGH: 3,
+                Severity.CRITICAL: 4,
+            }
+            max_severity = max(severities, key=lambda s: severity_order.get(s, 0))
+
+            # Title formulation
+            if common_agent and common_ip:
+                title = f"Multi-stage activity on {common_agent} from {common_ip}"
+            elif common_agent and common_user:
+                title = f"User '{common_user}' activity on {common_agent}"
+            elif common_agent:
+                title = f"Correlated events on host {common_agent}"
+            elif common_ip:
+                title = f"Correlated traffic from source IP {common_ip}"
+            elif common_user:
+                title = f"Correlated activity for user '{common_user}'"
+            else:
+                title = f"Correlated event group: {comp_alerts[0].rule_description}"
+
+            # Create stable deterministic ID
+            alert_ids_str = ",".join(sorted(a.id for a in comp_alerts))
+            h = hashlib.md5(alert_ids_str.encode()).hexdigest()[:8]
+            incident_id = f"INC-{first_seen.strftime('%Y%m%d')}-{h.upper()}"
+
+            # Extract MITRE tactics & techniques
+            from soc_analyst.mitre.attack_mapper import MitreAttackMapper
+            mapper = MitreAttackMapper()
+            all_tactics = set()
+            all_techniques = set()
+            for a in comp_alerts:
+                for m in mapper.map_alert(a):
+                    all_techniques.add(m.technique_id)
+                    for t in m.tactic.split(", "):
+                        if t:
+                            all_tactics.add(t)
+
+            # Build timeline
+            timeline = [
+                f"{a.timestamp.isoformat()} - Alert {a.id}: {a.rule_description} (Level {a.rule_level})"
+                for a in comp_alerts
+            ]
+
+            # Affected Assets & Users
+            affected_assets = sorted(list(agents | ips))
+            affected_users = sorted(list(users))
+
+            incidents.append(
+                CorrelatedIncident(
+                    incident_id=incident_id,
+                    title=title,
+                    severity=max_severity,
+                    overall_severity=max_severity,
+                    alert_count=len(comp_alerts),
+                    alerts=comp_alerts,
+                    timeline=timeline,
+                    affected_assets=affected_assets,
+                    affected_users=affected_users,
+                    combined_mitre_techniques=sorted(list(all_techniques)),
+                    mitre_tactics=sorted(list(all_tactics)),
+                    common_agent=common_agent,
+                    common_ip=common_ip,
+                    common_user=common_user,
+                    first_seen=first_seen,
+                    last_seen=last_seen,
+                )
+            )
+
+        # Sort incidents so the most recent is first
+        incidents.sort(key=lambda inc: inc.last_seen, reverse=True)
+        return incidents

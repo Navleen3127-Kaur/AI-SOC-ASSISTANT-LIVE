@@ -1,0 +1,26 @@
+prioritization:
+  severity_weights:
+    critical: 10
+    high: 7
+    medium: 4
+    low: 2
+    info: 1
+  rule_level_boost:
+    min: 12
+    max: 15
+    boost: 3
+  asset_criticality:
+    domain_controller: 5
+    database: 4
+    web_server: 3
+    workstation: 1
+
+analysis:
+  max_log_context_lines: 20
+  include_raw_alert: true
+  mitre_confidence_threshold: 0.6
+
+report:
+  template: incident_report.md.j2
+  include_timeline: true
+  include_mitre_matrix: true

@@ -1,0 +1,24 @@
+# AI SOC Analyst Pipeline Enhancements Tasks (Part 2)
+
+- [x] **1. Upgrade Schema Models (schemas.py)**
+  - [x] Add report metadata to `IncidentReport`: `report_version`, `generated_by`, `llm_provider`, `llm_model`, `execution_mode`, `report_type`.
+  - [x] Add executive metrics to `IncidentReport`: `total_alerts_analyzed`, `correlated_alerts_count`, `affected_hosts_count`, `affected_users_count`, `critical_assets_count`, `false_positive_probability`, `threat_intel_hits`, `mitre_techniques_count`.
+- [x] **2. Refine IOC Classifications (ioc_extractor.py)**
+  - [x] Expand classifications to match all exact types: `Internal IP`, `External IP`, `Domain`, `URL`, `Hash`, `Filename`, `Process`, `Username`, `Registry Key`, `Email`.
+  - [x] Ensure correct keys/values and no private IPs labeled malicious.
+- [x] **3. Calculate Report Metadata & Metrics (soc_analyst.py)**
+  - [x] Set `report_version = "2.3"`, `generated_by = "AI SOC Analyst"`, `report_type = "Incident Investigation Summary"`.
+  - [x] Dynamically populate `llm_provider`, `llm_model`, and `execution_mode` (offline/live check).
+  - [x] Calculate `total_alerts_analyzed`, `correlated_alerts_count`, `affected_hosts_count`, `affected_users_count`, `critical_assets_count`, `false_positive_probability`, `threat_intel_hits`, `mitre_techniques_count`.
+- [x] **4. Build Cyber Kill Chain Progression Timeline (soc_analyst.py)**
+  - [x] Match and order tactics: `Reconnaissance` ➔ `Credential Access` ➔ `PowerShell Execution` ➔ `Payload Download` ➔ `Privilege Escalation` ➔ `Shadow Copy Deletion` ➔ `Data Encryption` ➔ `Impact`.
+  - [x] Save visual progression representation (as list/text block).
+- [x] **5. Update Document Renderers (report_generator.py & templates)**
+  - [x] Design professional PDF cover title, colored severity badges, page numbers, and confidential footer.
+  - [x] Render Report Metadata, Executive Metrics box, and Kill Chain progression block in PDF & Markdown.
+  - [x] Format threat intelligence summaries safely using markdown instead of raw lists.
+- [x] **6. Ensure Output & Dashboard Consistency (app.py & index.html)**
+  - [x] Serve the unified Pydantic `IncidentReport` object directly to all renderers.
+  - [x] Render metadata tables, executive metrics grids, and visual progression sequences in Dashboard UI.
+- [x] **7. Run Regression Tests**
+  - [x] Run pytest to verify all test suites pass.
